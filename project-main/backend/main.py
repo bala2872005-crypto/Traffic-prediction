@@ -19,6 +19,8 @@ import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from model import (
     get_predictions, get_network_graph,
     NODES, EDGES, ADJ_MATRIX, NODE_LIST, traffic_model
 )
