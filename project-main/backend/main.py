@@ -16,8 +16,9 @@ import pymysql
 from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
 import pandas as pd
+from dotenv import load_dotenv
 
-from model import (
+load_dotenv()
     get_predictions, get_network_graph,
     NODES, EDGES, ADJ_MATRIX, NODE_LIST, traffic_model
 )
@@ -391,19 +392,19 @@ def serve_register():
 
 def get_db_connection():
     return pymysql.connect(
-        host="127.0.0.1",
-        user="root",
-        password="root",
-        database="traffic_prediction",
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", "root"),
+        database=os.environ.get("DB_NAME", "traffic_prediction"),
         cursorclass=pymysql.cursors.DictCursor
     )
 
 def init_db():
     try:
         conn = pymysql.connect(
-            host="127.0.0.1",
-            user="root",
-            password="root"
+            host=os.environ.get("DB_HOST", "127.0.0.1"),
+            user=os.environ.get("DB_USER", "root"),
+            password=os.environ.get("DB_PASSWORD", "root")
         )
         cursor = conn.cursor()
         cursor.execute("CREATE DATABASE IF NOT EXISTS traffic_prediction")
