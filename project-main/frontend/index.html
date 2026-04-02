@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered Traffic Prediction & Smart Routing System using GNN and GRU models for real-time congestion analysis and optimal path finding.">
+    <title>AI Traffic Prediction & Smart Routing System</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- ═══ Header ═══ -->
+    <header class="header" id="mainHeader">
+        <div class="header-left">
+            <div class="logo">🚦</div>
+            <div class="header-title">
+                <h1>AI Traffic Prediction System</h1>
+                <p>GNN + GRU Spatial-Temporal Model</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span>System Active</span>
+            </div>
+            <button class="btn-logout" id="logoutBtn" title="Logout session">🚪 Logout</button>
+            <div class="model-badge">GNN + GRU</div>
+        </div>
+    </header>
+
+    <!-- ═══ Main Dashboard ═══ -->
+    <main class="main-container">
+
+        <!-- ─── Left Panel: Controls ─── -->
+        <aside class="left-panel">
+
+            <!-- Route Finder Card -->
+            <div class="glass-card" id="routeFinderCard">
+                <div class="card-header">
+                    <h2><span class="icon">🛣️</span> Route Finder</h2>
+                </div>
+                <div class="card-body">
+                    <!-- Vehicle Type Selector -->
+                    <label style="font-size:0.78rem;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:block;">Vehicle Type</label>
+                    <div class="vehicle-selector">
+                        <button class="vehicle-btn active" data-type="normal" id="btnNormal">
+                            <span class="vehicle-icon">🚗</span>
+                            Normal
+                        </button>
+                        <button class="vehicle-btn" data-type="emergency" id="btnEmergency">
+                            <span class="vehicle-icon">🚑</span>
+                            Ambulance
+                        </button>
+                        <button class="vehicle-btn" data-type="heavy" id="btnHeavy">
+                            <span class="vehicle-icon">🚛</span>
+                            Heavy
+                        </button>
+                    </div>
+
+                    <!-- Source Node -->
+                    <div class="form-group">
+                        <label for="sourceNode">Source Node</label>
+                        <select id="sourceNode">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+
+                    <!-- Target Node -->
+                    <div class="form-group">
+                        <label for="targetNode">Destination Node</label>
+                        <select id="targetNode">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+
+                    <!-- Find Route Button -->
+                    <button class="btn-primary" id="findRouteBtn">
+                        🔍 Find Optimal Route
+                    </button>
+
+                    <!-- Clear Route -->
+                    <button class="btn-secondary" id="clearRouteBtn" style="margin-top:8px;">
+                        ✕ Clear Route
+                    </button>
+
+                    <!-- Route Result -->
+                    <div class="route-result" id="routeResult"></div>
+                </div>
+            </div>
+
+            <!-- Prediction Controls -->
+            <div class="glass-card" id="predictionCard">
+                <div class="card-header">
+                    <h2><span class="icon">🧠</span> AI Predictions</h2>
+                </div>
+                <div class="card-body">
+                    <button class="btn-secondary" id="refreshBtn">
+                        🔄 Refresh Predictions
+                    </button>
+                    <div style="margin-top:12px;">
+                        <div class="map-legend">
+                            <div class="legend-item"><span class="legend-dot low-traffic"></span> Low (&lt;30%)</div>
+                            <div class="legend-item"><span class="legend-dot med-traffic"></span> Medium (30-60%)</div>
+                            <div class="legend-item"><span class="legend-dot high-traffic"></span> High (&gt;60%)</div>
+                        </div>
+                        <div class="map-legend" style="margin-top:8px;">
+                            <div class="legend-item"><span class="legend-dot highway"></span> Highway</div>
+                            <div class="legend-item"><span class="legend-dot main"></span> Main Road</div>
+                            <div class="legend-item"><span class="legend-dot narrow"></span> Narrow</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- ─── Center: Map + Stats ─── -->
+        <section class="center-panel">
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stat-card" id="statCardAvg">
+                    <div class="stat-value" id="statAvgCongestion">—</div>
+                    <div class="stat-label">Avg Congestion</div>
+                </div>
+                <div class="stat-card" id="statCardMax">
+                    <div class="stat-value" id="statMaxCongestion">—</div>
+                    <div class="stat-label">Peak Congestion</div>
+                </div>
+                <div class="stat-card" id="statCardHigh">
+                    <div class="stat-value" id="statHighNodes">—</div>
+                    <div class="stat-label">High Alert Nodes</div>
+                </div>
+                <div class="stat-card" id="statCardTotal">
+                    <div class="stat-value" id="statTotalNodes">—</div>
+                    <div class="stat-label">Total Nodes</div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="glass-card map-container" id="mapCard">
+                <div class="card-header">
+                    <h2><span class="icon">🗺️</span> Live Congestion Map</h2>
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="legend-dot" style="background:#06b6d4"></span> Route</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#ef4444"></span> Emergency</div>
+                        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span> Heavy Vehicle</div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="traffic-map"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── Right Panel: Info ─── -->
+        <aside class="right-panel">
+
+            <!-- Node Congestion List -->
+            <div class="glass-card" id="congestionCard" style="flex:1;">
+                <div class="card-header">
+                    <h2><span class="icon">📊</span> Node Congestion</h2>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <ul class="congestion-list" id="congestionList">
+                        <li class="congestion-item">
+                            <div class="congestion-left">
+                                <div class="node-badge low">—</div>
+                                <div>
+                                    <div class="congestion-name">Loading...</div>
+                                    <div class="congestion-type">WAITING</div>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Congestion Chart -->
+            <div class="glass-card" id="chartCard">
+                <div class="card-header">
+                    <h2><span class="icon">📈</span> Congestion Chart</h2>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="congestionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+<!-- Traffic Trends card removed to clean up the UI as requested -->
+
+        </aside>
+
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ═══ Scripts ═══ -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- App Modules -->
+    <script src="js/auth.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        // Setup logout button
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            Auth.logout();
+        });
+    </script>
+
+</body>
+</html>

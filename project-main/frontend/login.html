@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — AI Traffic Prediction System</title>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+
+    <div class="login-container">
+        <!-- Animated Background Image -->
+        <div class="login-bg" id="loginBg"></div>
+        <div class="login-overlay"></div>
+
+        <!-- Login Card -->
+        <div class="login-card glass-card">
+            <div class="login-header">
+                <div class="logo">🚦</div>
+                <h1>Welcome Back</h1>
+                <p>Access the AI Traffic Prediction Dashboard</p>
+            </div>
+
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">👤</span>
+                        <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="login-options">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="rememberMe">
+                        <span class="checkmark"></span>
+                        Remember Me
+                    </label>
+                    <a href="#" class="forgot-password">Forgot Password?</a>
+                </div>
+
+                <button type="submit" class="btn-primary" id="loginBtn">
+                    🚀 Log In to System
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>New here? <a href="/register" style="color: #ff3b30; font-weight: bold;">Create Account</a></p>
+            </div>
+            
+            <div id="errorMsg" class="error-message"></div>
+        </div>
+
+        <!-- Branding / Tech Info -->
+        <div class="tech-brand">
+            <div class="brand-item">
+                <span class="brand-val">GNN</span>
+                <span class="brand-label">Spatial Model</span>
+            </div>
+            <div class="brand-divider"></div>
+            <div class="brand-item">
+                <span class="brand-val">GRU</span>
+                <span class="brand-label">Temporal Learning</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Auth Script -->
+    <script src="js/auth.js"></script>
+    <script>
+        // Form handling
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const errorEl = document.getElementById('errorMsg');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Authenticating...';
+            errorEl.style.display = 'none';
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    Auth.saveSession(data.token, user);
+                    window.location.href = '/app';
+                } else {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Login failed');
+                }
+            } catch (error) {
+                errorEl.textContent = error.message;
+                errorEl.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Log In to System';
+            }
+        });
+    </script>
+</body>
+</html>

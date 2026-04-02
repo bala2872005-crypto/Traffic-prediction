@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — AI Traffic Prediction System</title>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/login.css">
+    <style>
+        :root {
+            --traffic-red: #ff3b30;
+            --traffic-yellow: #ffcc00;
+            --traffic-green: #4cd964;
+        }
+        .login-card {
+            border-top: 6px solid var(--traffic-red);
+            max-width: 480px;
+            width: 90%;
+            margin: 20px auto;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, var(--traffic-green), #248a3d);
+            box-shadow: 0 4px 15px rgba(76, 217, 100, 0.3);
+        }
+        .btn-primary:hover {
+            background: linear-gradient(90deg, #3cbd54, #1e7a35);
+            box-shadow: 0 6px 20px rgba(76, 217, 100, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <!-- Animated Background Image -->
+        <div class="login-bg" id="loginBg"></div>
+        <div class="login-overlay"></div>
+
+        <!-- Register Card -->
+        <div class="login-card glass-card">
+            <div class="login-header">
+                <div class="logo" style="background: var(--traffic-yellow); color: #000;">🚦</div>
+                <h1>Create Account</h1>
+                <p>Register for the AI Traffic Monitoring System</p>
+            </div>
+
+            <form class="login-form" id="registerForm">
+                <div class="form-group">
+                    <label for="regUsername">Username</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">👤</span>
+                        <input type="text" id="regUsername" placeholder="Choose a username" required autocomplete="username">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="regEmail">Email Address</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">📧</span>
+                        <input type="email" id="regEmail" placeholder="Enter your email" required autocomplete="email">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="regPassword">Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input type="password" id="regPassword" placeholder="Create a password" required autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔄</span>
+                        <input type="password" id="confirmPassword" placeholder="Confirm your password" required autocomplete="new-password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="registerBtn">
+                    ✅ Register Account
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>Already have an account? <a href="/login" style="color: var(--traffic-yellow);">Log In</a></p>
+            </div>
+            
+            <div id="statusMsg" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- Auth Script -->
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('registerBtn');
+            const user = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const pass = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('confirmPassword').value;
+            const statusEl = document.getElementById('statusMsg');
+
+            if (pass !== confirm) {
+                statusEl.textContent = "Passwords do not match!";
+                statusEl.style.display = 'block';
+                statusEl.style.color = '#ff3b30';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Registering...';
+            statusEl.style.display = 'none';
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, email: email, password: pass })
+                });
+
+                if (response.ok) {
+                    statusEl.textContent = "Registration successful! Redirecting...";
+                    statusEl.style.display = 'block';
+                    statusEl.style.color = '#4cd964';
+                    statusEl.style.background = 'rgba(76, 217, 100, 0.1)';
+                    statusEl.style.borderColor = 'rgba(76, 217, 100, 0.3)';
+                    
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 500);
+                } else {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Registration failed');
+                }
+            } catch (error) {
+                statusEl.textContent = error.message;
+                statusEl.style.display = 'block';
+                statusEl.style.color = '#ff3b30';
+                btn.disabled = false;
+                btn.innerHTML = '✅ Register Account';
+            }
+        });
+    </script>
+</body>
+</html>
