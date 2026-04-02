@@ -12,7 +12,7 @@ from typing import List, Optional
 import numpy as np
 import json
 import os
-import pymysql
+import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
 import pandas as pd
@@ -100,7 +100,7 @@ def login(request: LoginRequest):
     try:
         db = get_db_connection()
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (request.username, request.password))
+        cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (request.username, request.password))
         user = cursor.fetchone()
         db.close()
         
@@ -132,14 +132,14 @@ def register(request: RegisterRequest):
         cursor = db.cursor()
         
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE username = %s OR email = %s", (request.username, request.email))
+        cursor.execute("SELECT id FROM users WHERE username = ? OR email = ?", (request.username, request.email))
         if cursor.fetchone():
             db.close()
             raise HTTPException(status_code=400, detail="Username or email already registered")
             
         # Insert user
         cursor.execute(
-            "INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
+            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
             (request.username, request.email, request.password)
         )
         db.commit()
@@ -390,43 +390,34 @@ def serve_register():
     return FileResponse(os.path.join(FRONTEND_DIR, "register.html"))
 
 
-# ─── MySQL Database Setup ──────────────────────────────────────────────────
+# ─── SQLite Database Setup ──────────────────────────────────────────────────
+
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "traffic.db")
 
 def get_db_connection():
-    return pymysql.connect(
-        host=os.environ.get("DB_HOST", "127.0.0.1"),
-        port=int(os.environ.get("DB_PORT", 3306)),
-        user=os.environ.get("DB_USER", "root"),
-        password=os.environ.get("DB_PASSWORD", "root"),
-        database=os.environ.get("DB_NAME", "traffic_prediction"),
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
     try:
-        conn = pymysql.connect(
-            host=os.environ.get("DB_HOST", "127.0.0.1"),
-            port=int(os.environ.get("DB_PORT", 3306)),
-            user=os.environ.get("DB_USER", "root"),
-            password=os.environ.get("DB_PASSWORD", "root")
-        )
+        os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+        conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("CREATE DATABASE IF NOT EXISTS traffic_prediction")
-        cursor.execute("USE traffic_prediction")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(50) UNIQUE NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                password VARCHAR(255) NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.commit()
         conn.close()
-        print("[DB] MySQL connection and schema verified.")
+        print("[DB] SQLite database and schema verified.")
     except Exception as e:
-        print(f"[DB] Error initializing database: {e}")
+        print(f"[DB] Error initializing SQLite database: {e}")
 
 # ─── Automated Daily Dataset Update ──────────────────────────────────────────
 
