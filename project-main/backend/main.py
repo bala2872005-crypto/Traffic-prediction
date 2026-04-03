@@ -457,7 +457,12 @@ def serve_login():
 
 @app.get("/app")
 def serve_frontend():
-    """Serve the frontend dashboard (new Google Maps style UI)."""
+    """Serve the frontend dashboard (Complete Google Maps clone)."""
+    return FileResponse(os.path.join(FRONTEND_DIR, "index-complete.html"))
+
+@app.get("/app-simple")
+def serve_frontend_simple():
+    """Serve the simple Google Maps-style UI."""
     return FileResponse(os.path.join(FRONTEND_DIR, "index-new.html"))
 
 @app.get("/app-old")
