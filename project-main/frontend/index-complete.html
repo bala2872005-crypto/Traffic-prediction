@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>AI Traffic Maps - Complete Navigation</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <!-- Google Maps Complete Style -->
+    <link rel="stylesheet" href="css/complete-maps-style.css">
+</head>
+<body>
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Left Sidebar - Search & Directions -->
+        <div class="left-panel" id="leftPanel">
+            <!-- Search Section -->
+            <div class="search-section">
+                <div class="search-header">
+                    <button class="menu-btn" id="menuBtn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="search-box-main">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" placeholder="Search Google Maps" id="mainSearch" class="main-search-input">
+                        <button class="voice-btn" id="voiceSearchBtn">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button class="quick-action-btn" id="directionsBtn">
+                        <i class="fas fa-directions"></i>
+                        <span>Directions</span>
+                    </button>
+                    <button class="quick-action-btn" id="exploreBtn">
+                        <i class="fas fa-compass"></i>
+                        <span>Explore</span>
+                    </button>
+                    <button class="quick-action-btn" id="savedBtn">
+                        <i class="fas fa-bookmark"></i>
+                        <span>Saved</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Directions Panel -->
+            <div class="directions-panel hidden" id="directionsPanel">
+                <div class="directions-header">
+                    <button class="back-btn" id="backToSearch">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <h2>Directions</h2>
+                </div>
+                
+                <!-- Travel Mode Selector -->
+                <div class="travel-modes">
+                    <button class="mode-btn active" data-mode="car">
+                        <i class="fas fa-car"></i>
+                    </button>
+                    <button class="mode-btn" data-mode="transit">
+                        <i class="fas fa-bus"></i>
+                    </button>
+                    <button class="mode-btn" data-mode="walk">
+                        <i class="fas fa-walking"></i>
+                    </button>
+                    <button class="mode-btn" data-mode="bike">
+                        <i class="fas fa-bicycle"></i>
+                    </button>
+                    <button class="mode-btn" data-mode="emergency">
+                        <i class="fas fa-ambulance"></i>
+                    </button>
+                    <button class="mode-btn" data-mode="truck">
+                        <i class="fas fa-truck"></i>
+                    </button>
+                </div>
+                
+                <!-- Route Input -->
+                <div class="route-input-container">
+                    <div class="route-input-group">
+                        <div class="route-marker start-marker"></div>
+                        <input type="text" placeholder="Choose starting point" id="startPoint" class="route-input">
+                        <button class="clear-input" id="clearStart">×</button>
+                        <div class="autocomplete-list" id="startAutocomplete"></div>
+                    </div>
+                    
+                    <button class="swap-btn" id="swapLocations">
+                        <i class="fas fa-exchange-alt"></i>
+                    </button>
+                    
+                    <div class="route-input-group">
+                        <div class="route-marker end-marker"></div>
+                        <input type="text" placeholder="Choose destination" id="endPoint" class="route-input">
+                        <button class="clear-input" id="clearEnd">×</button>
+                        <div class="autocomplete-list" id="endAutocomplete"></div>
+                    </div>
+                </div>
+                
+                <!-- Route Options -->
+                <div class="route-options">
+                    <label class="option-checkbox">
+                        <input type="checkbox" id="avoidTolls">
+                        <span>Avoid tolls</span>
+                    </label>
+                    <label class="option-checkbox">
+                        <input type="checkbox" id="avoidHighways">
+                        <span>Avoid highways</span>
+                    </label>
+                    <label class="option-checkbox">
+                        <input type="checkbox" id="avoidFerries">
+                        <span>Avoid ferries</span>
+                    </label>
+                </div>
+                
+                <!-- Route Results -->
+                <div class="route-results" id="routeResults"></div>
+            </div>
+            
+            <!-- Explore Panel -->
+            <div class="explore-panel hidden" id="explorePanel">
+                <div class="explore-header">
+                    <button class="back-btn" id="backFromExplore">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <h2>Explore nearby</h2>
+                </div>
+                
+                <div class="explore-categories">
+                    <button class="category-btn" data-category="restaurants">
+                        <i class="fas fa-utensils"></i>
+                        <span>Restaurants</span>
+                    </button>
+                    <button class="category-btn" data-category="gas">
+                        <i class="fas fa-gas-pump"></i>
+                        <span>Gas stations</span>
+                    </button>
+                    <button class="category-btn" data-category="parking">
+                        <i class="fas fa-parking"></i>
+                        <span>Parking</span>
+                    </button>
+                    <button class="category-btn" data-category="hotels">
+                        <i class="fas fa-hotel"></i>
+                        <span>Hotels</span>
+                    </button>
+                    <button class="category-btn" data-category="atm">
+                        <i class="fas fa-credit-card"></i>
+                        <span>ATMs</span>
+                    </button>
+                    <button class="category-btn" data-category="hospital">
+                        <i class="fas fa-hospital"></i>
+                        <span>Hospitals</span>
+                    </button>
+                </div>
+                
+                <div class="nearby-results" id="nearbyResults"></div>
+            </div>
+        </div>
+        
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="mainMap"></div>
+            
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <!-- Layer Selector -->
+                <div class="layer-selector">
+                    <button class="control-btn" id="layerBtn">
+                        <i class="fas fa-layer-group"></i>
+                    </button>
+                    <div class="layer-menu hidden" id="layerMenu">
+                        <button class="layer-option active" data-layer="default">
+                            <i class="fas fa-map"></i>
+                            <span>Default</span>
+                        </button>
+                        <button class="layer-option" data-layer="satellite">
+                            <i class="fas fa-satellite"></i>
+                            <span>Satellite</span>
+                        </button>
+                        <button class="layer-option" data-layer="terrain">
+                            <i class="fas fa-mountain"></i>
+                            <span>Terrain</span>
+                        </button>
+                        <button class="layer-option" data-layer="traffic">
+                            <i class="fas fa-traffic-light"></i>
+                            <span>Traffic</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- My Location -->
+                <button class="control-btn" id="myLocationBtn">
+                    <i class="fas fa-location-crosshairs"></i>
+                </button>
+                
+                <!-- 3D View -->
+                <button class="control-btn" id="view3dBtn">
+                    <i class="fas fa-cube"></i>
+                </button>
+                
+                <!-- Street View -->
+                <button class="control-btn" id="streetViewBtn">
+                    <i class="fas fa-street-view"></i>
+                </button>
+            </div>
+            
+            <!-- Traffic Legend -->
+            <div class="traffic-legend hidden" id="trafficLegend">
+                <div class="legend-title">Traffic conditions</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #34a853;"></div>
+                    <span>Normal flow</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fbbc04;"></div>
+                    <span>Moderate traffic</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ea4335;"></div>
+                    <span>Heavy traffic</span>
+                </div>
+            </div>
+            
+            <!-- AI Assistant Button -->
+            <button class="ai-assistant-btn" id="aiAssistantBtn">
+                <i class="fas fa-robot"></i>
+                <span>AI Assistant</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- AI Assistant Chat -->
+    <div class="ai-chat-container hidden" id="aiChatContainer">
+        <div class="ai-chat-header">
+            <div class="ai-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="ai-info">
+                <h3>AI Navigation Assistant</h3>
+                <p>Powered by your Traffic Prediction AI</p>
+            </div>
+            <button class="close-chat" id="closeChatBtn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="ai-chat-messages" id="aiChatMessages">
+            <div class="ai-message">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>Hi! I'm your AI navigation assistant. I can help you with:</p>
+                    <ul>
+                        <li>🗺️ Finding the best routes with real-time traffic</li>
+                        <li>🚦 Explaining traffic conditions</li>
+                        <li>🔄 Suggesting alternative routes</li>
+                        <li>📍 Finding nearby places</li>
+                        <li>🚗 Vehicle-specific navigation</li>
+                    </ul>
+                    <p>Try asking: "What's the traffic like to Madurai?" or "Find me the fastest route"</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="ai-chat-input-container">
+            <input type="text" placeholder="Ask AI assistant..." id="aiChatInput" class="ai-chat-input">
+            <button class="send-btn" id="sendAiMessage">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+            <button class="voice-input-btn" id="voiceInputBtn">
+                <i class="fas fa-microphone"></i>
+            </button>
+        </div>
+        
+        <div class="ai-suggestions">
+            <button class="suggestion-chip">Find fastest route</button>
+            <button class="suggestion-chip">Check traffic</button>
+            <button class="suggestion-chip">Nearby restaurants</button>
+            <button class="suggestion-chip">Alternative routes</button>
+        </div>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p>Loading...</p>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/complete-maps-app.js"></script>
+</body>
+</html>
