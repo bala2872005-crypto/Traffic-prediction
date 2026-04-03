@@ -332,6 +332,20 @@ body {
     height: 100%;
 }
 
+/* Mobile map adjustments - ensure map is visible with sidebar */
+@media (max-width: 768px) {
+    .map-wrapper {
+        top: 0;
+        padding-top: 180px;
+    }
+}
+
+@media (max-width: 480px) {
+    .map-wrapper {
+        padding-top: 220px;
+    }
+}
+
 /* Sidebar */
 .sidebar {
     position: fixed;
@@ -351,7 +365,7 @@ body {
     transform: translateX(0);
 }
 
-/* Mobile sidebar takes full width and slides from bottom */
+/* Mobile sidebar - shorter height to show map above */
 @media (max-width: 768px) {
     .sidebar {
         top: auto;
@@ -359,8 +373,8 @@ body {
         left: 0;
         right: 0;
         width: 100%;
-        height: 60vh;
-        max-height: 500px;
+        height: 45vh; /* Reduced to show more map */
+        max-height: 400px;
         transform: translateY(100%);
         box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
         border-radius: 16px 16px 0 0;
@@ -368,6 +382,26 @@ body {
     
     .sidebar.show {
         transform: translateY(0);
+    }
+    
+    /* Add drag handle for mobile */
+    .sidebar::before {
+        content: '';
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 4px;
+        background: #dadce0;
+        border-radius: 2px;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        height: 50vh;
+        max-height: 450px;
     }
 }
 
@@ -392,10 +426,80 @@ body {
     color: #5f6368;
     cursor: pointer;
     padding: 4px;
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.close-sidebar:hover {
+    background: #f1f3f4;
+}
+
+.close-sidebar:active {
+    background: #e8eaed;
+}
+
+/* Mobile sidebar header */
+@media (max-width: 768px) {
+    .sidebar-header {
+        padding: 20px 16px 12px;
+        position: relative;
+        cursor: pointer; /* Make drag handle area clickable */
+    }
+    
+    /* Make header tappable to minimize */
+    .sidebar-header:active::before {
+        opacity: 0.5;
+    }
+    
+    .close-sidebar {
+        position: absolute;
+        right: 8px;
+        top: 16px;
+        z-index: 1;
+    }
+    
+    .sidebar-title {
+        padding-right: 50px; /* Space for close button */
+    }
 }
 
 .route-info-panel {
     padding: 16px;
+}
+
+/* Add "View Full Map" button on mobile */
+.view-map-btn {
+    display: none;
+    width: 100%;
+    padding: 12px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: background 0.2s;
+}
+
+.view-map-btn:hover {
+    background: #1765cc;
+}
+
+.view-map-btn:active {
+    background: #1557b0;
+}
+
+@media (max-width: 768px) {
+    .view-map-btn {
+        display: block;
+    }
 }
 
 .route-summary {

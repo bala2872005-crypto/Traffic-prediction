@@ -428,6 +428,8 @@ const App = (() => {
                 </div>
             `;
             sidebar.classList.add('show');
+            // Resize map after sidebar animation
+            setTimeout(() => map.invalidateSize(), 350);
             return;
         }
         
@@ -455,6 +457,8 @@ const App = (() => {
         ` : '';
         
         panel.innerHTML = `
+            <button class="view-map-btn" id="viewMapBtn">📍 View Full Map</button>
+            
             <div class="route-summary">
                 <div class="distance">${result.distance} km</div>
                 <div class="duration">Via ${result.path.length} locations</div>
@@ -470,6 +474,31 @@ const App = (() => {
         `;
         
         sidebar.classList.add('show');
+        
+        // Add click handler for "View Full Map" button
+        const viewMapBtn = document.getElementById('viewMapBtn');
+        if (viewMapBtn) {
+            viewMapBtn.addEventListener('click', () => {
+                sidebar.classList.remove('show');
+                setTimeout(() => map.invalidateSize(), 350);
+            });
+        }
+        
+        // Resize map after sidebar animation completes
+        setTimeout(() => {
+            map.invalidateSize();
+            // On mobile, adjust map view to show route above sidebar
+            if (window.innerWidth <= 768 && result.path) {
+                const path = result.path;
+                const positions = path.map(nodeId => nodeMarkers[nodeId]?.pos).filter(Boolean);
+                if (positions.length > 0) {
+                    map.fitBounds(positions, { 
+                        padding: [50, 50],
+                        maxZoom: 10
+                    });
+                }
+            }
+        }, 350);
     }
     
     // Event Handlers
@@ -516,7 +545,21 @@ const App = (() => {
         // Close sidebar
         document.getElementById('closeSidebar').addEventListener('click', () => {
             document.getElementById('sidebar').classList.remove('show');
+            // Resize map after closing sidebar
+            setTimeout(() => map.invalidateSize(), 350);
         });
+        
+        // Mobile: Tap sidebar header to minimize on mobile
+        const sidebarHeader = document.getElementById('sidebar').querySelector('.sidebar-header');
+        if (sidebarHeader && window.innerWidth <= 768) {
+            sidebarHeader.addEventListener('click', (e) => {
+                // Don't close if clicking the close button
+                if (!e.target.closest('.close-sidebar')) {
+                    document.getElementById('sidebar').classList.remove('show');
+                    setTimeout(() => map.invalidateSize(), 350);
+                }
+            });
+        }
         
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
