@@ -159,3 +159,14 @@ timestamp,node_id,node_name,traffic_volume,speed_kmh,congestion_level,road_type
 2026-04-03 06:11:54,ERD,Erode,102,51,0.85,narrow
 2026-04-03 06:11:54,TUT,Thoothukudi,196,53,0.89,narrow
 2026-04-03 06:11:54,TNJ,Thanjavur,221,36,0.67,narrow
+2026-04-03 06:22:01,CHN,Chennai,169,10,0.89,highway
+2026-04-03 06:22:01,CBE,Coimbatore,252,35,0.88,highway
+2026-04-03 06:22:01,MDU,Madurai,164,22,0.68,highway
+2026-04-03 06:22:01,TRY,Trichy,483,32,0.14,highway
+2026-04-03 06:22:01,SLM,Salem,328,39,0.61,main
+2026-04-03 06:22:01,TNV,Tirunelveli,120,56,0.2,main
+2026-04-03 06:22:01,VLR,Vellore,353,41,0.27,main
+2026-04-03 06:22:01,ERD,Erode,373,41,0.35,narrow
+2026-04-03 06:22:01,TUT,Thoothukudi,468,57,0.88,narrow
+2026-04-03 06:22:01,TNJ,Thanjavur,420,24,0.21,narrow
+

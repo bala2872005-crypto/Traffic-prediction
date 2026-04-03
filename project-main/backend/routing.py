@@ -8,6 +8,43 @@ import numpy as np
 import math
 
 
+def calculate_real_distance(lat1, lon1, lat2, lon2):
+    """
+    Calculate real distance in kilometers using Haversine formula.
+    """
+    R = 6371  # Earth's radius in kilometers
+    
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+    
+    a = math.sin(delta_lat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    
+    distance = R * c
+    return distance
+
+
+def calculate_route_distance(G, path):
+    """
+    Calculate actual distance in km for a route path using node coordinates.
+    """
+    total_distance = 0
+    for i in range(len(path) - 1):
+        node1 = path[i]
+        node2 = path[i + 1]
+        
+        pos1 = G.nodes[node1]["pos"]
+        pos2 = G.nodes[node2]["pos"]
+        
+        # Calculate real distance between coordinates
+        distance = calculate_real_distance(pos1[0], pos1[1], pos2[0], pos2[1])
+        total_distance += distance
+    
+    return total_distance
+
+
 def build_road_network(nodes, edges, congestion_data=None):
     """
     Build a NetworkX graph from node and edge data.
@@ -52,14 +89,15 @@ def heuristic(G, node1, node2):
 def dijkstra_route(G, source, target):
     """
     Find shortest path using Dijkstra's algorithm.
-    Returns path and total distance.
+    Returns path and total distance in kilometers.
     """
     try:
         path = nx.dijkstra_path(G, source, target, weight="weight")
-        distance = nx.dijkstra_path_length(G, source, target, weight="weight")
+        # Calculate actual distance in km using coordinates
+        actual_distance = calculate_route_distance(G, path)
         return {
             "path": path,
-            "distance": round(distance, 2),
+            "distance": round(actual_distance, 2),
             "algorithm": "Dijkstra",
             "success": True
         }
@@ -77,13 +115,15 @@ def astar_route(G, source, target):
     """
     Find shortest path using A* algorithm with Euclidean heuristic.
     More efficient than Dijkstra for single source-target queries.
+    Returns actual distance in kilometers.
     """
     try:
         path = nx.astar_path(G, source, target, heuristic=lambda n1, n2: heuristic(G, n1, n2), weight="weight")
-        distance = sum(G[path[i]][path[i+1]]["weight"] for i in range(len(path)-1))
+        # Calculate actual distance in km using coordinates
+        actual_distance = calculate_route_distance(G, path)
         return {
             "path": path,
-            "distance": round(distance, 2),
+            "distance": round(actual_distance, 2),
             "algorithm": "A*",
             "success": True
         }
@@ -131,11 +171,12 @@ def emergency_route(G, source, target, congestion_data=None):
 
     try:
         path = nx.dijkstra_path(G_emergency, source, target, weight="weight")
-        distance = sum(G_emergency[path[i]][path[i+1]]["weight"] for i in range(len(path)-1))
+        # Calculate actual distance in km using coordinates
+        actual_distance = calculate_route_distance(G_emergency, path)
 
         return {
             "path": path,
-            "distance": round(distance, 2),
+            "distance": round(actual_distance, 2),
             "algorithm": "Emergency (Dijkstra + Congestion Avoidance)",
             "vehicle_type": "ambulance",
             "success": True,
@@ -190,11 +231,12 @@ def heavy_vehicle_route(G, source, target, congestion_data=None):
 
     try:
         path = nx.dijkstra_path(G_heavy, source, target, weight="weight")
-        distance = sum(G_heavy[path[i]][path[i+1]]["weight"] for i in range(len(path)-1))
+        # Calculate actual distance in km using coordinates
+        actual_distance = calculate_route_distance(G_heavy, path)
 
         return {
             "path": path,
-            "distance": round(distance, 2),
+            "distance": round(actual_distance, 2),
             "algorithm": "Heavy Vehicle (Dijkstra + Road Type Filter)",
             "vehicle_type": "heavy",
             "success": True,
