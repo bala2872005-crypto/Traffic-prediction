@@ -11,3 +11,7 @@ venv.bak/
 
 .env
 .DS_Store
+-e 
+# Environment files
+*.env
+*.env.*
