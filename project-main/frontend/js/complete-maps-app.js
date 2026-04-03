@@ -73,12 +73,17 @@ const MapsApp = (() => {
     // Map Initialization
     function initializeMap() {
         return new Promise((resolve) => {
+            console.log('🗺️ Initializing map...');
+            
             // Initialize main map
             state.map = L.map('mainMap', {
-                center: [11.1271, 78.6569],
+                center: [11.1271, 78.6569], // Tamil Nadu center
                 zoom: 7,
-                zoomControl: true
+                zoomControl: true,
+                preferCanvas: true
             });
+            
+            console.log('Map object created');
             
             // Default layer - OpenStreetMap
             mapLayers.default = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -86,22 +91,33 @@ const MapsApp = (() => {
                 maxZoom: 19
             }).addTo(state.map);
             
-            // Satellite layer
+            console.log('Default tile layer added');
+            
+            // Satellite layer (not added by default)
             mapLayers.satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri',
                 maxZoom: 19
             });
             
-            // Terrain layer
+            // Terrain layer (not added by default)
             mapLayers.terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
                 attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap',
                 maxZoom: 17
             });
             
-            setTimeout(() => {
+            // Wait for map to load
+            state.map.whenReady(() => {
+                console.log('✅ Map is ready');
                 state.map.invalidateSize();
                 resolve();
-            }, 200);
+            });
+            
+            // Fallback timeout
+            setTimeout(() => {
+                console.log('Map initialization timeout - forcing resize');
+                state.map.invalidateSize();
+                resolve();
+            }, 1000);
         });
     }
     
@@ -491,21 +507,38 @@ const MapsApp = (() => {
     
     // Draw Route on Map
     function drawRouteOnMap(result) {
+        console.log('🎨 Drawing route on map:', result);
+        
         clearRouteMarkers();
         
-        if (!result.success || !result.path) return;
+        if (!result.success || !result.path) {
+            console.error('Cannot draw route - invalid result');
+            return;
+        }
         
         const positions = result.path.map(nodeId => {
             const loc = state.locations.find(l => l.id === nodeId);
-            return loc ? [loc.lat, loc.lng] : null;
+            if (!loc) {
+                console.warn(`Location not found: ${nodeId}`);
+                return null;
+            }
+            return [loc.lat, loc.lng];
         }).filter(Boolean);
         
-        if (positions.length === 0) return;
+        console.log(`Found ${positions.length} positions for route`);
+        
+        if (positions.length === 0) {
+            console.error('No valid positions for route');
+            showToast('Unable to draw route on map', 'error');
+            return;
+        }
         
         // Draw route line
         let color = '#1a73e8';
         if (state.currentMode === 'emergency') color = '#ea4335';
         else if (state.currentMode === 'truck') color = '#f97316';
+        
+        console.log(`Drawing route line with color ${color}`);
         
         const routeLine = L.polyline(positions, {
             color: color,
@@ -516,7 +549,9 @@ const MapsApp = (() => {
         state.routeMarkers.push(routeLine);
         
         // Draw traffic zones
-        if (result.path_details) {
+        if (result.path_details && result.path_details.length > 0) {
+            console.log(`Drawing ${result.path_details.length} traffic zones`);
+            
             result.path_details.forEach(node => {
                 const loc = state.locations.find(l => l.id === node.id);
                 if (!loc) return;
@@ -538,7 +573,7 @@ const MapsApp = (() => {
             });
         }
         
-        // Start and end markers
+        // Start marker (A)
         const startMarker = L.marker(positions[0], {
             icon: L.divIcon({
                 className: 'custom-marker',
@@ -553,6 +588,7 @@ const MapsApp = (() => {
                     justify-content: center;
                     color: white;
                     font-weight: bold;
+                    font-size: 16px;
                     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
                 ">A</div>`,
                 iconSize: [32, 32],
@@ -560,6 +596,7 @@ const MapsApp = (() => {
             })
         }).addTo(state.map);
         
+        // End marker (B)
         const endMarker = L.marker(positions[positions.length - 1], {
             icon: L.divIcon({
                 className: 'custom-marker',
@@ -574,6 +611,7 @@ const MapsApp = (() => {
                     justify-content: center;
                     color: white;
                     font-weight: bold;
+                    font-size: 16px;
                     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
                 ">B</div>`,
                 iconSize: [32, 32],
@@ -584,7 +622,10 @@ const MapsApp = (() => {
         state.routeMarkers.push(startMarker, endMarker);
         
         // Fit map to route
+        console.log('Fitting map to route bounds');
         state.map.fitBounds(positions, { padding: [50, 50] });
+        
+        console.log('✅ Route drawn successfully');
     }
     
     function clearRouteMarkers() {
