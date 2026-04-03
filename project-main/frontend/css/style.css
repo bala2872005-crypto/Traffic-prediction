@@ -827,6 +827,17 @@ body::before {
     to { transform: rotate(360deg); }
 }
 
+@keyframes pulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -961,3 +972,30 @@ body::before {
         gap: 12px;
     }
 }
+
+/* ─── Traffic Warning Styles ───────────────────────────────────────────────── */
+.traffic-warning-popup {
+    font-family: var(--font-main);
+    color: var(--text-primary);
+}
+
+.traffic-warning-popup h3 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+}
+
+.btn-alternative-route:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.alternative-route-card {
+    transition: all 0.2s ease !important;
+}
+
+.alternative-route-card:hover {
+    transform: translateX(4px) !important;
+}
+

@@ -96,6 +96,9 @@ const App = (() => {
         });
     }
 
+    // Store current route result for later use
+    let currentRouteResult = null;
+
     // ─── UI Updates ──────────────────────────────────────────────────────────
 
     function updateStats(summary) {
@@ -192,6 +195,82 @@ const App = (() => {
                 : html;
         }).join('');
 
+        // Traffic warnings section
+        let warningsHTML = '';
+        if (result.traffic_warnings && result.traffic_warnings.length > 0) {
+            const warningsList = result.traffic_warnings.map(w => {
+                const severityColor = w.severity === 'high' ? '#ef4444' : 
+                                     w.severity === 'medium' ? '#f59e0b' : '#10b981';
+                const icon = w.severity === 'high' ? '⚠️' : '⚡';
+                return `
+                    <div class="traffic-warning-item" style="
+                        padding: 8px 12px;
+                        background: rgba(15, 23, 42, 0.4);
+                        border-radius: 6px;
+                        border-left: 3px solid ${severityColor};
+                        margin-bottom: 8px;
+                    ">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 4px;">
+                                    ${icon} ${w.name}
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                                    <strong>Reason:</strong> ${w.reason}
+                                </div>
+                            </div>
+                            <div style="
+                                padding: 4px 8px;
+                                background: ${severityColor}22;
+                                color: ${severityColor};
+                                border-radius: 4px;
+                                font-size: 0.7rem;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                            ">
+                                ${w.severity}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            warningsHTML = `
+                <div style="margin-top: 12px;">
+                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase;">
+                        🚦 Traffic Alerts (${result.traffic_warnings.length})
+                    </div>
+                    ${warningsList}
+                </div>
+            `;
+        }
+
+        // Alternative routes button (shown only when heavy traffic detected)
+        let alternativeHTML = '';
+        if (result.has_heavy_traffic) {
+            alternativeHTML = `
+                <button class="btn-alternative-route" id="showAlternativesBtn" style="
+                    width: 100%;
+                    margin-top: 12px;
+                    padding: 10px 16px;
+                    background: rgba(239, 68, 68, 0.1);
+                    border: 1px solid rgba(239, 68, 68, 0.3);
+                    border-radius: 8px;
+                    color: #fca5a5;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                ">
+                    🔄 Find Alternative Routes
+                </button>
+            `;
+        }
+
         // Features (for emergency/heavy)
         let featuresHTML = '';
         if (result.features && result.features.length > 0) {
@@ -229,8 +308,18 @@ const App = (() => {
                     ${savedHTML}
                 </div>
                 ${featuresHTML}
+                ${warningsHTML}
+                ${alternativeHTML}
             </div>
         `;
+
+        // Setup alternative routes button
+        if (result.has_heavy_traffic) {
+            const altBtn = document.getElementById('showAlternativesBtn');
+            if (altBtn) {
+                altBtn.addEventListener('click', () => showAlternativeRoutes());
+            }
+        }
     }
 
     // ─── Event Handlers ──────────────────────────────────────────────────────
@@ -275,13 +364,23 @@ const App = (() => {
 
             try {
                 const result = await findRoute(source, target, currentVehicleType);
+                currentRouteResult = result; // Store for later use
                 displayRouteResult(result);
 
                 if (result.success) {
                     const routeType = currentVehicleType === 'emergency' ? 'emergency' :
                                      currentVehicleType === 'heavy' ? 'heavy' : 'normal';
-                    MapModule.drawRoute(result.path, routeType);
-                    showToast(`Route found: ${result.path.join(' → ')}`, 'success');
+                    
+                    // Pass traffic warnings to map for visualization
+                    const trafficWarnings = result.traffic_warnings || [];
+                    MapModule.drawRoute(result.path, routeType, trafficWarnings);
+                    
+                    // Show success message with traffic info
+                    if (trafficWarnings.length > 0) {
+                        showToast(`Route found with ${trafficWarnings.length} traffic alert(s)!`, 'info');
+                    } else {
+                        showToast(`Route found: ${result.path.join(' → ')}`, 'success');
+                    }
                 }
             } catch (error) {
                 showToast('Failed to find route. Check backend connection.', 'error');

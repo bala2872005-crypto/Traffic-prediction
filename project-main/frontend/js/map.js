@@ -193,9 +193,9 @@ const MapModule = (() => {
     }
 
     /**
-     * Draw a route on the map
+     * Draw a route on the map with traffic zones
      */
-    function drawRoute(path, type = 'normal') {
+    function drawRoute(path, type = 'normal', trafficWarnings = []) {
         clearRoutes();
 
         if (!path || path.length < 2) return;
@@ -236,6 +236,87 @@ const MapModule = (() => {
         }).addTo(map);
 
         routeLines.push(routeLine, glowLine);
+
+        // Draw traffic zones and warnings
+        if (trafficWarnings && trafficWarnings.length > 0) {
+            trafficWarnings.forEach(warning => {
+                const pos = [warning.position[0], warning.position[1]];
+                let zoneColor = '#10b981'; // green
+                let zoneRadius = 8000; // meters
+                
+                if (warning.severity === 'high') {
+                    zoneColor = '#ef4444'; // red
+                    zoneRadius = 12000;
+                } else if (warning.severity === 'medium') {
+                    zoneColor = '#f59e0b'; // yellow
+                    zoneRadius = 10000;
+                }
+                
+                // Draw colored zone circle
+                const zone = L.circle(pos, {
+                    color: zoneColor,
+                    fillColor: zoneColor,
+                    fillOpacity: 0.15,
+                    opacity: 0.5,
+                    weight: 2,
+                    radius: zoneRadius
+                }).addTo(map);
+                
+                trafficZones.push(zone);
+                
+                // Add traffic warning marker
+                const warningIcon = warning.severity === 'high' ? '⚠️' : 
+                                  warning.severity === 'medium' ? '⚡' : 'ℹ️';
+                
+                const warningMarker = L.marker(pos, {
+                    icon: L.divIcon({
+                        className: 'traffic-warning-icon',
+                        html: `<div class="warning-marker ${warning.severity}" style="
+                            background: ${zoneColor};
+                            color: white;
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 18px;
+                            border: 3px solid white;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                            animation: pulse 2s infinite;
+                        ">${warningIcon}</div>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    })
+                }).addTo(map);
+                
+                // Bind popup with traffic explanation
+                warningMarker.bindPopup(`
+                    <div class="traffic-warning-popup" style="min-width: 200px;">
+                        <h3 style="margin: 0 0 8px 0; color: ${zoneColor}; font-size: 1rem;">
+                            ${warningIcon} Traffic Alert
+                        </h3>
+                        <div style="margin-bottom: 6px;">
+                            <strong>Location:</strong> ${warning.name}
+                        </div>
+                        <div style="margin-bottom: 6px;">
+                            <strong>Severity:</strong> 
+                            <span style="color: ${zoneColor}; font-weight: 600; text-transform: uppercase;">
+                                ${warning.severity}
+                            </span>
+                        </div>
+                        <div style="margin-bottom: 6px;">
+                            <strong>Congestion:</strong> ${(warning.congestion * 100).toFixed(1)}%
+                        </div>
+                        <div style="padding: 8px; background: rgba(0,0,0,0.1); border-radius: 6px; border-left: 3px solid ${zoneColor};">
+                            <strong>Reason:</strong> ${warning.reason}
+                        </div>
+                    </div>
+                `, { className: 'custom-popup' });
+                
+                trafficMarkers.push(warningMarker);
+            });
+        }
 
         // Highlight start and end nodes
         if (path.length >= 2) {
@@ -285,6 +366,12 @@ const MapModule = (() => {
     function clearRoutes() {
         routeLines.forEach(line => map.removeLayer(line));
         routeLines = [];
+        
+        trafficZones.forEach(zone => map.removeLayer(zone));
+        trafficZones = [];
+        
+        trafficMarkers.forEach(marker => map.removeLayer(marker));
+        trafficMarkers = [];
     }
 
     /**

@@ -29,7 +29,7 @@ from routing import (
     emergency_route, heavy_vehicle_route, get_alternative_routes
 )
 
-# ─── FastAPI App ──────────────────────────────────────────────────────────────
+# - FastAPI App -
 
 app = FastAPI(
     title="AI Traffic Prediction & Smart Routing System",
@@ -47,7 +47,7 @@ app.add_middleware(
 )
 
 
-# ─── Request/Response Models ─────────────────────────────────────────────────
+# - Request/Response Models -
 
 class RouteRequest(BaseModel):
     source: str
@@ -79,7 +79,7 @@ class RegisterRequest(BaseModel):
     password: str
 
 
-# ─── Endpoints ────────────────────────────────────────────────────────────────
+# - Endpoints -
 
 @app.get("/")
 def home():
@@ -234,21 +234,54 @@ def find_route(request: RouteRequest):
     else:
         result = dijkstra_route(G, request.source, request.target)
 
-    # Add node details to path
+    # Add node details to path with traffic analysis
     if result["success"]:
         path_details = []
+        traffic_warnings = []
+        has_heavy_traffic = False
+        
         for node_id in result["path"]:
             info = NODES[node_id]
             cong = congestion_data.get(node_id, {})
+            congestion_level = cong.get("congestion", 0)
+            traffic_level = cong.get("traffic_level", "unknown")
+            reason = cong.get("reason", "Normal Flow")
+            
             path_details.append({
                 "id": node_id,
                 "name": info["name"],
                 "position": info["pos"],
                 "type": info["type"],
-                "congestion": cong.get("congestion", 0),
-                "level": cong.get("traffic_level", "unknown")
+                "congestion": congestion_level,
+                "level": traffic_level,
+                "reason": reason
             })
+            
+            # Collect traffic warnings
+            if traffic_level == "high":
+                has_heavy_traffic = True
+                traffic_warnings.append({
+                    "node": node_id,
+                    "name": info["name"],
+                    "severity": "high",
+                    "congestion": congestion_level,
+                    "reason": reason,
+                    "position": info["pos"]
+                })
+            elif traffic_level == "medium":
+                traffic_warnings.append({
+                    "node": node_id,
+                    "name": info["name"],
+                    "severity": "medium",
+                    "congestion": congestion_level,
+                    "reason": reason,
+                    "position": info["pos"]
+                })
+        
         result["path_details"] = path_details
+        result["traffic_warnings"] = traffic_warnings
+        result["has_heavy_traffic"] = has_heavy_traffic
+        result["total_warnings"] = len(traffic_warnings)
 
     return result
 
@@ -271,18 +304,38 @@ def find_emergency_route(request: EmergencyRouteRequest):
 
     if result["success"]:
         path_details = []
+        traffic_warnings = []
+        
         for node_id in result["path"]:
             info = NODES[node_id]
             cong = congestion_data.get(node_id, {})
+            congestion_level = cong.get("congestion", 0)
+            traffic_level = cong.get("traffic_level", "unknown")
+            reason = cong.get("reason", "Normal Flow")
+            
             path_details.append({
                 "id": node_id,
                 "name": info["name"],
                 "position": info["pos"],
                 "type": info["type"],
-                "congestion": cong.get("congestion", 0),
-                "level": cong.get("traffic_level", "unknown")
+                "congestion": congestion_level,
+                "level": traffic_level,
+                "reason": reason
             })
+            
+            # Collect traffic warnings (even for emergency routes)
+            if traffic_level in ["high", "medium"]:
+                traffic_warnings.append({
+                    "node": node_id,
+                    "name": info["name"],
+                    "severity": traffic_level,
+                    "congestion": congestion_level,
+                    "reason": reason,
+                    "position": info["pos"]
+                })
+        
         result["path_details"] = path_details
+        result["traffic_warnings"] = traffic_warnings
 
     # Also provide the normal route for comparison
     normal = dijkstra_route(G, request.source, request.target)
@@ -310,18 +363,38 @@ def find_heavy_vehicle_route(request: HeavyVehicleRouteRequest):
 
     if result["success"]:
         path_details = []
+        traffic_warnings = []
+        
         for node_id in result["path"]:
             info = NODES[node_id]
             cong = congestion_data.get(node_id, {})
+            congestion_level = cong.get("congestion", 0)
+            traffic_level = cong.get("traffic_level", "unknown")
+            reason = cong.get("reason", "Normal Flow")
+            
             path_details.append({
                 "id": node_id,
                 "name": info["name"],
                 "position": info["pos"],
                 "type": info["type"],
-                "congestion": cong.get("congestion", 0),
-                "level": cong.get("traffic_level", "unknown")
+                "congestion": congestion_level,
+                "level": traffic_level,
+                "reason": reason
             })
+            
+            # Collect traffic warnings
+            if traffic_level in ["high", "medium"]:
+                traffic_warnings.append({
+                    "node": node_id,
+                    "name": info["name"],
+                    "severity": traffic_level,
+                    "congestion": congestion_level,
+                    "reason": reason,
+                    "position": info["pos"]
+                })
+        
         result["path_details"] = path_details
+        result["traffic_warnings"] = traffic_warnings
 
     return result
 
@@ -360,7 +433,7 @@ def get_nodes():
     }
 
 
-# ─── Static File Serving ──────────────────────────────────────────────────────
+# - Static File Serving -
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
 
@@ -390,7 +463,7 @@ def serve_register():
     return FileResponse(os.path.join(FRONTEND_DIR, "register.html"))
 
 
-# ─── SQLite Database Setup ──────────────────────────────────────────────────
+# - SQLite Database Setup -
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "traffic.db")
 
@@ -419,7 +492,7 @@ def init_db():
     except Exception as e:
         print(f"[DB] Error initializing SQLite database: {e}")
 
-# ─── Automated Daily Dataset Update ──────────────────────────────────────────
+# - Automated Daily Dataset Update -
 
 def daily_data_update():
     """Simulates daily dataset update by appending new synthetic data."""
@@ -472,7 +545,24 @@ def daily_data_update():
     except Exception as e:
         print(f"[AI] Update error: {e}")
 
-# ─── Startup Background Jobs ────────────────────────────────────────────────
+# - Startup Background Jobs -
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
+    
+    # Setup Daily Scheduler
+    scheduler = BackgroundScheduler()
+    # Run once at startup to ensure data is fresh
+    scheduler.add_job(daily_data_update, 'interval', days=1, next_run_time=datetime.datetime.now())
+    scheduler.start()
+    print("[OK] Daily Dataset Auto-Update Scheduler started.")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 @app.on_event("startup")
 def startup_event():
