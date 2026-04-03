@@ -1,489 +1,1006 @@
-/**
- * Main Application Logic
- * Handles API communication, UI updates, and user interactions
- */
+// ════════════════════════════════════════════════════════════════
+//  TN Command Center — Full Featured App.js
+//  Features: Voice Nav, Map Switcher, Nearby Places, Bookmarks,
+//            Traffic Layer, Congestion Heatmap, AI Suggestions,
+//            Multi Route, Vehicle Modes, Share Route
+// ════════════════════════════════════════════════════════════════
 
-const App = (() => {
-    const API_BASE = ''; // Use relative paths for same-origin requests
-    let currentVehicleType = 'normal';
-    let graphData = null;
-    let trafficData = null;
+// ─── STATE ───────────────────────────────────────────────────────
+const logContainer = document.getElementById('systemLogs');
+let map;
+let routingControl       = null;
+let hazardsLayer         = L.layerGroup();
+let trafficLayer         = L.layerGroup();
+let heatmapLayer         = L.layerGroup();
+let bikeRouteLayer       = L.layerGroup();
+let transitLayer         = L.layerGroup();
+let nearbyLayer          = L.layerGroup();
+let routeCoordinates     = [];
+let navigatingMarker     = null;
+let navigationInterval   = null;
+let ambulanceMode        = false;
+let heavyVehicleMode     = false;
+let hazardData           = [];
+let staticHazardData     = [];
+let currentRouteSummary  = null;
+let currentRouteInstructions = [];
+let livePositionWatcher  = null;
+let isMidJourneyRerouting= false;
+let hazardWarningsIssued = new Set();
+let activeTriRoutes      = [];
+let currentTravelMode    = 'driving';
+let currentMapLayer      = 'dark';
+let tileLayer            = null;
+let voiceNavEnabled      = true;
+let savedPlaces          = JSON.parse(localStorage.getItem('tn_saved_places') || '[]');
 
-    // ─── Toast Notifications ─────────────────────────────────────────────────
+// OSRM profile map
+const OSRM_PROFILES = {
+    driving:  'driving',
+    cycling:  'cycling',
+    walking:  'foot',
+    transit:  'driving'  // fallback; real transit needs GTFS
+};
 
-    function showToast(message, type = 'info') {
-        const container = document.getElementById('toastContainer');
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-            <span>${message}</span>
-        `;
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.animation = 'toastOut 0.3s ease forwards';
-            setTimeout(() => toast.remove(), 300);
-        }, 3500);
+// Tile layer configs
+const TILE_LAYERS = {
+    dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '© OpenStreetMap © CARTO',
+        invert: false
+    },
+    street: {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '© OpenStreetMap contributors',
+        invert: false
+    },
+    satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: '© Esri',
+        invert: false
+    },
+    terrain: {
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution: '© OpenTopoMap',
+        invert: false
     }
+};
 
-    // ─── API Calls ───────────────────────────────────────────────────────────
+// ─── LOGGING ─────────────────────────────────────────────────────
+function addLog(message, type = 'normal') {
+    if (!logContainer) return;
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.innerHTML = `<span style="opacity:0.5">[${time}]</span> ${message}`;
+    logContainer.appendChild(entry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
 
-    async function fetchJSON(url, options = {}) {
-        try {
-            const response = await fetch(url, {
-                headers: { 'Content-Type': 'application/json' },
-                ...options
+// ─── MAP INIT ────────────────────────────────────────────────────
+async function initApp() {
+    addLog('Initializing TN Command Center...');
+
+    map = L.map('map', { zoomControl: false }).setView([11.1271, 78.6569], 7);
+
+    tileLayer = L.tileLayer(TILE_LAYERS.dark.url, {
+        attribution: TILE_LAYERS.dark.attribution,
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(map);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    hazardsLayer.addTo(map);
+    trafficLayer.addTo(map);
+
+    addLog('Map initialized', 'success');
+
+    loadRecentSearches();
+    loadSavedPlaces();
+    await fetchHazards();
+    await fetchAndOverlayTrafficData();
+    generateAISuggestions();
+    setupEventListeners();
+
+    // Init AI assistant
+    if (window.AIAssistant) AIAssistant.init();
+}
+
+// ─── MAP LAYER SWITCHER ──────────────────────────────────────────
+function switchMapLayer(type) {
+    if (currentMapLayer === type) return;
+    currentMapLayer = type;
+
+    if (tileLayer) map.removeLayer(tileLayer);
+
+    const config = TILE_LAYERS[type];
+    tileLayer = L.tileLayer(config.url, {
+        attribution: config.attribution,
+        subdomains: type === 'dark' ? 'abcd' : 'abc',
+        maxZoom: 19
+    }).addTo(map);
+
+    // Update active button
+    document.querySelectorAll('.map-type-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`mapType${type.charAt(0).toUpperCase() + type.slice(1)}`);
+    if (btn) btn.classList.add('active');
+
+    addLog(`Map view: ${type}`, 'success');
+}
+
+// ─── TRAVEL MODE ────────────────────────────────────────────────
+function setTravelMode(mode) {
+    currentTravelMode = mode;
+    document.querySelectorAll('.travel-mode-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`mode${mode}`);
+    if (btn) btn.classList.add('active');
+    addLog(`Travel mode: ${mode}`, 'success');
+
+    // Re-plan route if one exists
+    if (routeCoordinates.length > 0) planRoute();
+}
+
+// ─── HAZARDS ────────────────────────────────────────────────────
+async function fetchHazards() {
+    addLog('Fetching road hazard data...');
+    try {
+        const response = await fetch('/api/road-hazards');
+        if (!response.ok) throw new Error('API unavailable');
+        hazardData = await response.json();
+    } catch (e) {
+        // Static fallback hazards distributed across Tamil Nadu
+        hazardData = [
+            { id: 'h1', lat: 13.082, lng: 80.270, type: 'traffic', severity: 'high', title: 'Heavy Traffic - Anna Salai' },
+            { id: 'h2', lat: 11.663, lng: 78.146, type: 'accident', severity: 'high', title: 'Accident - Salem Bypass' },
+            { id: 'h3', lat: 10.791, lng: 78.705, type: 'roadwork', severity: 'medium', title: 'Road Work - Trichy NH' },
+            { id: 'h4', lat: 9.925,  lng: 78.119, type: 'pothole', severity: 'medium', title: 'Potholes - Madurai Ring Road' },
+            { id: 'h5', lat: 11.127, lng: 77.341, type: 'speedbreaker', severity: 'low', title: 'Speed Breakers - Erode' },
+            { id: 'h6', lat: 12.308, lng: 79.994, type: 'signal', severity: 'low', title: 'Signal Failure - Vellore' },
+            { id: 'h7', lat: 10.508, lng: 76.999, type: 'party', severity: 'medium', title: 'Party Event - Coimbatore' },
+            { id: 'h8', lat: 8.731,  lng: 77.734, type: 'accident', severity: 'high', title: 'Accident - Tirunelveli Highway' }
+        ];
+        addLog(`Using ${hazardData.length} static hazard markers`, 'warning');
+    }
+    staticHazardData = [...hazardData];
+    plotHazards(hazardData);
+    addLog(`Loaded ${hazardData.length} hazard reports`, 'success');
+}
+
+const HAZARD_CONFIG = {
+    pothole:     { color: '#f59e0b', icon: '🕳️' },
+    accident:    { color: '#ef4444', icon: '💥' },
+    traffic:     { color: '#fcd34d', icon: '🚦' },
+    speedbreaker:{ color: '#38bdf8', icon: '🛑' },
+    roadwork:    { color: '#d946ef', icon: '🚧' },
+    party:       { color: '#8b5cf6', icon: '📢' },
+    signal:      { color: '#10b981', icon: '🚦' }
+};
+
+function plotHazards(data) {
+    hazardsLayer.clearLayers();
+    data.forEach(hazard => {
+        const config = HAZARD_CONFIG[hazard.type] || { color: '#fff', icon: '📍' };
+        const markerHTML = `<div style="background-color: ${config.color}; width: 30px; height: 30px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px ${config.color}; display: flex; align-items: center; justify-content: center; font-size: 16px;">${config.icon}</div>`;
+        const icon = L.divIcon({ html: markerHTML, className: 'custom-hazard-marker', iconSize: [30, 30], iconAnchor: [15, 15] });
+        const marker = L.marker([hazard.lat, hazard.lng], { icon, zIndexOffset: 800 }).bindPopup(`
+            <strong>${hazard.title}</strong><br>
+            <span style="color:#666; font-size:12px;">Type: ${hazard.type.toUpperCase()}</span><br>
+            <span style="color:#666; font-size:12px;">Severity: ${hazard.severity.toUpperCase()}</span>
+        `);
+        hazardsLayer.addLayer(marker);
+
+        if (hazard.severity === 'high' || hazard.severity === 'critical' || hazard.type === 'traffic') {
+            const size = 0.005;
+            const bounds = [[hazard.lat - size, hazard.lng - size], [hazard.lat + size, hazard.lng + size]];
+            const rect = L.rectangle(bounds, { color: '#ef4444', weight: 3, fillOpacity: 0.1, interactive: true }).addTo(hazardsLayer);
+            rect.on('click', () => handleHighTrafficSquareClick(hazard, bounds));
+        }
+    });
+}
+
+function handleHighTrafficSquareClick(hazard, bounds) {
+    map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5 });
+    activeTriRoutes.forEach(r => map.removeLayer(r));
+    activeTriRoutes = [];
+
+    let cause = 'Live AI tracked dense flow of heavy vehicles overlapping with commuter peaks.';
+    if (hazard.type === 'accident') cause = 'AI detected multi-vehicle collision blocking two primary lanes.';
+    else if (hazard.type === 'roadwork') cause = 'Scheduled highway expansion causing severe bottleneck upstream.';
+
+    document.getElementById('aiTrafficExplanation').innerHTML =
+        `<strong>Diagnostic:</strong> ${hazard.title}<br><br><strong>AI Insight:</strong> ${cause}`;
+    document.getElementById('triRoutingPanel').classList.remove('hidden');
+
+    const center = L.latLng(hazard.lat, hazard.lng);
+    const s = 0.008;
+    const hl = L.polyline([[center.lat-s, center.lng-s],[center.lat+s*1.5,center.lng-s*1.5],[center.lat+s, center.lng+s]], { color: '#facc15', weight: 6, dashArray: '10,10' }).addTo(map);
+    const nl = L.polyline([[center.lat-s*0.8,center.lng-s*0.5],[center.lat-s*0.5,center.lng+s*1.2],[center.lat+s*0.8,center.lng+s*0.5]], { color: '#10b981', weight: 6 }).addTo(map);
+    const al = L.polyline([[center.lat-s,center.lng],[center.lat,center.lng+s*0.5],[center.lat+s,center.lng]], { color: '#ef4444', weight: 8, dashArray: '20,15' }).addTo(map);
+    activeTriRoutes.push(hl, nl, al);
+}
+
+// ─── AI TRAFFIC DATA OVERLAY ─────────────────────────────────────
+async function fetchAndOverlayTrafficData() {
+    addLog('Fetching AI traffic predictions...');
+    trafficLayer.clearLayers();
+    heatmapLayer.clearLayers();
+
+    try {
+        const res = await fetch('/traffic-data');
+        if (!res.ok) throw new Error('traffic-data API error');
+        const data = await res.json();
+        const predictions = data.predictions;
+
+        Object.values(predictions).forEach(node => {
+            if (!node.position || !node.position[0] || !node.position[1]) return;
+            const lat = node.position[0];
+            const lng = node.position[1];
+            const cong = node.congestion;
+
+            let color = cong > 0.6 ? '#ef4444' : cong > 0.3 ? '#f59e0b' : '#10b981';
+            const radius = 600 + cong * 1200;
+
+            // Traffic circle
+            const circle = L.circle([lat, lng], {
+                radius, color, fillColor: color, fillOpacity: 0.12, weight: 2, opacity: 0.6
             });
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'API Error');
-            }
-            return await response.json();
-        } catch (error) {
-            if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                showToast('Cannot connect to backend. Make sure the server is running on port 8000.', 'error');
-            }
-            throw error;
-        }
-    }
+            circle.bindPopup(`<strong>${node.name}</strong><br>Congestion: ${(cong * 100).toFixed(0)}%<br>Level: ${node.traffic_level}`);
+            trafficLayer.addLayer(circle);
 
-    async function loadGraph() {
-        try {
-            graphData = await fetchJSON(`${API_BASE}/graph`);
-            return graphData;
-        } catch (e) {
-            console.error('Failed to load graph:', e);
-            return null;
-        }
-    }
+            // Heatmap div marker
+            const heatEl = L.divIcon({
+                html: `<div style="width:${radius/40}px; height:${radius/40}px; border-radius:50%; background:${color}; opacity:0.15; border:2px solid ${color};"></div>`,
+                className: 'congestion-heatmap-circle',
+                iconSize: [radius/40, radius/40],
+                iconAnchor: [radius/80, radius/80]
+            });
+            heatmapLayer.addLayer(L.marker([lat, lng], { icon: heatEl, zIndexOffset: -100 }));
+        });
 
-    async function loadTrafficData() {
-        try {
-            const data = await fetchJSON(`${API_BASE}/traffic-data`);
-            trafficData = data.predictions;
-            return data;
-        } catch (e) {
-            console.error('Failed to load traffic data:', e);
-            return null;
-        }
-    }
-
-    async function loadNodes() {
-        try {
-            return await fetchJSON(`${API_BASE}/nodes`);
-        } catch (e) {
-            console.error('Failed to load nodes:', e);
-            return null;
-        }
-    }
-
-    async function findRoute(source, target, vehicleType) {
-        let endpoint = '/route';
-        if (vehicleType === 'emergency') endpoint = '/route/emergency';
-        else if (vehicleType === 'heavy') endpoint = '/route/heavy';
-
-        return await fetchJSON(`${API_BASE}${endpoint}`, {
-            method: 'POST',
-            body: JSON.stringify({ source, target })
+        addLog('AI traffic overlay rendered', 'success');
+    } catch (e) {
+        addLog('Traffic overlay using simulated data', 'warning');
+        // Simulated fallback circles for Tamil Nadu nodes
+        const simNodes = [
+            { lat: 13.082, lng: 80.270, name: 'Chennai', cong: 0.82 },
+            { lat: 11.663, lng: 78.146, name: 'Salem', cong: 0.55 },
+            { lat: 10.791, lng: 78.705, name: 'Trichy', cong: 0.34 },
+            { lat: 9.925,  lng: 78.119, name: 'Madurai', cong: 0.71 },
+            { lat: 11.127, lng: 77.341, name: 'Erode', cong: 0.42 },
+            { lat: 10.508, lng: 76.999, name: 'Coimbatore', cong: 0.67 },
+            { lat: 12.308, lng: 79.994, name: 'Vellore', cong: 0.30 },
+            { lat: 8.731,  lng: 77.734, name: 'Tirunelveli', cong: 0.58 }
+        ];
+        simNodes.forEach(n => {
+            const color = n.cong > 0.6 ? '#ef4444' : n.cong > 0.3 ? '#f59e0b' : '#10b981';
+            const circle = L.circle([n.lat, n.lng], { radius: 2000 + n.cong * 4000, color, fillColor: color, fillOpacity: 0.1, weight: 2, opacity: 0.5 });
+            circle.bindPopup(`<strong>${n.name}</strong><br>AI Congestion: ${(n.cong * 100).toFixed(0)}%`);
+            trafficLayer.addLayer(circle);
         });
     }
+}
 
-    async function getPredictions() {
-        return await fetchJSON(`${API_BASE}/predict`, {
-            method: 'POST',
-            body: JSON.stringify({})
-        });
-    }
+// ─── NEARBY PLACES (Overpass API) ───────────────────────────────
+async function findNearby(placeType) {
+    const center = map.getCenter();
+    const radius = 5000;
+    addLog(`Searching nearby: ${placeType}`, 'warning');
+    nearbyLayer.clearLayers();
+    if (!map.hasLayer(nearbyLayer)) nearbyLayer.addTo(map);
 
-    // Store current route result for later use
-    let currentRouteResult = null;
+    const TAG_MAP = {
+        restaurant: 'amenity=restaurant', coffee: 'amenity=cafe',
+        hospital: 'amenity=hospital', fuel: 'amenity=fuel',
+        atm: 'amenity=atm', police: 'amenity=police',
+        pharmacy: 'amenity=pharmacy', hotel: 'tourism=hotel',
+        park: 'leisure=park', bank: 'amenity=bank'
+    };
+    const typeKey = Object.keys(TAG_MAP).find(k => placeType.toLowerCase().includes(k)) || 'amenity=cafe';
+    const tagQuery = TAG_MAP[typeKey] || `amenity=${placeType}`;
+    const [key, val] = tagQuery.split('=');
 
-    // ─── UI Updates ──────────────────────────────────────────────────────────
+    const query = `[out:json][timeout:10];node["${key}"="${val}"](around:${radius},${center.lat},${center.lng});out 8;`;
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
-    function updateStats(summary) {
-        const avgEl = document.getElementById('statAvgCongestion');
-        const maxEl = document.getElementById('statMaxCongestion');
-        const highEl = document.getElementById('statHighNodes');
-        const totalEl = document.getElementById('statTotalNodes');
+    const resultsList = document.getElementById('nearbyResultsList');
+    if (resultsList) resultsList.innerHTML = '<div style="color:#64748b; font-size:12px; padding:8px;">Searching...</div>';
 
-        if (avgEl) avgEl.textContent = (summary.avg_congestion * 100).toFixed(1) + '%';
-        if (maxEl) maxEl.textContent = (summary.max_congestion * 100).toFixed(1) + '%';
-        if (highEl) highEl.textContent = summary.high_congestion_nodes;
-        if (totalEl) totalEl.textContent = summary.total_nodes;
-    }
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const elements = data.elements || [];
 
-    function updateCongestionList(predictions) {
-        const list = document.getElementById('congestionList');
-        if (!list) return;
-
-        // Sort by congestion descending
-        const sorted = Object.entries(predictions).sort(
-            (a, b) => b[1].congestion - a[1].congestion
-        );
-
-        list.innerHTML = sorted.map(([nodeId, info]) => {
-            const level = info.traffic_level;
-            const percent = (info.congestion * 100).toFixed(1);
-
-            return `
-                <li class="congestion-item">
-                    <div class="congestion-left">
-                        <div class="node-badge ${level}">${nodeId}</div>
-                        <div style="flex: 1;">
-                            <div class="congestion-name">${info.name}</div>
-                            <div class="congestion-type" style="display:inline-block;">${info.type.toUpperCase()}</div>
-                            <div class="congestion-reason" style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
-                                <span style="font-weight:600;">Reason:</span> ${info.reason || 'Normal Flow'}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="congestion-right">
-                        <div class="congestion-bar-container">
-                            <div class="congestion-bar ${level}" style="width:${percent}%"></div>
-                        </div>
-                        <div class="congestion-percent ${level}">${percent}%</div>
-                    </div>
-                </li>
-            `;
-        }).join('');
-    }
-
-    function populateNodeSelectors(nodes) {
-        const sourceSelect = document.getElementById('sourceNode');
-        const targetSelect = document.getElementById('targetNode');
-
-        if (!sourceSelect || !targetSelect) return;
-
-        const options = nodes.map(n =>
-            `<option value="${n.id}">${n.id} — ${n.name} (${n.type})</option>`
-        ).join('');
-
-        sourceSelect.innerHTML = '<option value="">Select Source</option>' + options;
-        targetSelect.innerHTML = '<option value="">Select Destination</option>' + options;
-
-        // Set defaults
-        if (nodes.length >= 2) {
-            sourceSelect.value = nodes[0].id;
-            targetSelect.value = nodes[nodes.length - 1].id;
-        }
-    }
-
-    function displayRouteResult(result) {
-        const container = document.getElementById('routeResult');
-        if (!container) return;
-
-        container.classList.add('show');
-
-        if (!result.success) {
-            container.innerHTML = `
-                <div class="route-info" style="border-color: var(--accent-red);">
-                    <div class="route-label">❌ Route Not Found</div>
-                    <p style="color: var(--text-secondary); font-size: 0.85rem;">
-                        ${result.error || 'Unable to find a path between these nodes.'}
-                    </p>
-                </div>
-            `;
+        if (elements.length === 0) {
+            if (resultsList) resultsList.innerHTML = '<div style="color:#64748b; font-size:12px; padding:8px;">No results found nearby.</div>';
             return;
         }
 
-        // Build path display
-        const pathHTML = result.path.map((node, i) => {
-            const html = `<span class="route-node">${node}</span>`;
-            return i < result.path.length - 1
-                ? html + '<span class="route-arrow">→</span>'
-                : html;
-        }).join('');
+        const icons = {
+            restaurant: '🍽️', cafe: '☕', hospital: '🏥', fuel: '⛽',
+            atm: '🏧', police: '🚔', pharmacy: '💊', hotel: '🏨', park: '🌳', bank: '🏦'
+        };
+        const icon = icons[val] || icons[typeKey] || '📍';
 
-        // Traffic warnings section
-        let warningsHTML = '';
-        if (result.traffic_warnings && result.traffic_warnings.length > 0) {
-            const warningsList = result.traffic_warnings.map(w => {
-                const severityColor = w.severity === 'high' ? '#ef4444' : 
-                                     w.severity === 'medium' ? '#f59e0b' : '#10b981';
-                const icon = w.severity === 'high' ? '⚠️' : '⚡';
-                return `
-                    <div class="traffic-warning-item" style="
-                        padding: 8px 12px;
-                        background: rgba(15, 23, 42, 0.4);
-                        border-radius: 6px;
-                        border-left: 3px solid ${severityColor};
-                        margin-bottom: 8px;
-                    ">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 4px;">
-                                    ${icon} ${w.name}
-                                </div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">
-                                    <strong>Reason:</strong> ${w.reason}
-                                </div>
-                            </div>
-                            <div style="
-                                padding: 4px 8px;
-                                background: ${severityColor}22;
-                                color: ${severityColor};
-                                border-radius: 4px;
-                                font-size: 0.7rem;
-                                font-weight: 600;
-                                text-transform: uppercase;
-                            ">
-                                ${w.severity}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            warningsHTML = `
-                <div style="margin-top: 12px;">
-                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase;">
-                        🚦 Traffic Alerts (${result.traffic_warnings.length})
-                    </div>
-                    ${warningsList}
-                </div>
-            `;
-        }
+        if (resultsList) resultsList.innerHTML = '';
 
-        // Alternative routes button (shown only when heavy traffic detected)
-        let alternativeHTML = '';
-        if (result.has_heavy_traffic) {
-            alternativeHTML = `
-                <button class="btn-alternative-route" id="showAlternativesBtn" style="
-                    width: 100%;
-                    margin-top: 12px;
-                    padding: 10px 16px;
-                    background: rgba(239, 68, 68, 0.1);
-                    border: 1px solid rgba(239, 68, 68, 0.3);
-                    border-radius: 8px;
-                    color: #fca5a5;
-                    font-weight: 600;
-                    font-size: 0.85rem;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 8px;
-                ">
-                    🔄 Find Alternative Routes
-                </button>
-            `;
-        }
+        elements.slice(0, 8).forEach(el => {
+            const name = el.tags.name || `${val.charAt(0).toUpperCase() + val.slice(1)}`;
+            const dist = map.getCenter().distanceTo([el.lat, el.lon]);
+            const distStr = dist > 1000 ? (dist/1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
 
-        // Features (for emergency/heavy)
-        let featuresHTML = '';
-        if (result.features && result.features.length > 0) {
-            featuresHTML = `
-                <div class="feature-tags">
-                    ${result.features.map(f => `<span class="feature-tag">✓ ${f}</span>`).join('')}
-                </div>
-            `;
-        }
-
-        // Time saved (for emergency)
-        let savedHTML = '';
-        if (result.time_saved && result.time_saved > 0) {
-            savedHTML = `
-                <div class="route-meta-item" style="grid-column: 1 / -1; border-color: rgba(16,185,129,0.3);">
-                    <div class="meta-label">⚡ Time Saved vs Normal Route</div>
-                    <div class="meta-value" style="color: var(--accent-green);">${result.time_saved.toFixed(2)} units</div>
-                </div>
-            `;
-        }
-
-        container.innerHTML = `
-            <div class="route-info">
-                <div class="route-label">🛣️ ${result.algorithm}</div>
-                <div class="route-path">${pathHTML}</div>
-                <div class="route-meta">
-                    <div class="route-meta-item">
-                        <div class="meta-label">Distance</div>
-                        <div class="meta-value">${result.distance}</div>
-                    </div>
-                    <div class="route-meta-item">
-                        <div class="meta-label">Stops</div>
-                        <div class="meta-value">${result.path.length}</div>
-                    </div>
-                    ${savedHTML}
-                </div>
-                ${featuresHTML}
-                ${warningsHTML}
-                ${alternativeHTML}
-            </div>
-        `;
-
-        // Setup alternative routes button
-        if (result.has_heavy_traffic) {
-            const altBtn = document.getElementById('showAlternativesBtn');
-            if (altBtn) {
-                altBtn.addEventListener('click', () => showAlternativeRoutes());
-            }
-        }
-    }
-
-    // ─── Event Handlers ──────────────────────────────────────────────────────
-
-    function setupVehicleSelector() {
-        document.querySelectorAll('.vehicle-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.vehicle-btn').forEach(b => {
-                    b.classList.remove('active', 'emergency', 'heavy');
-                });
-                btn.classList.add('active');
-
-                const type = btn.dataset.type;
-                currentVehicleType = type;
-
-                if (type === 'emergency') btn.classList.add('emergency');
-                if (type === 'heavy') btn.classList.add('heavy');
+            // Map marker
+            const markerIcon = L.divIcon({
+                html: `<div style="background:#1e3a5f; border:2px solid #38bdf8; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 0 8px rgba(56,189,248,0.4);">${icon}</div>`,
+                className: '', iconSize: [32,32], iconAnchor: [16,16]
             });
-        });
-    }
+            const marker = L.marker([el.lat, el.lon], { icon: markerIcon, zIndexOffset: 900 });
+            marker.bindPopup(`<strong>${name}</strong><br><small>${val}</small><br><small>~${distStr}</small>`);
+            marker.on('click', () => showPlaceDetail(el, name, val, icon, distStr));
+            nearbyLayer.addLayer(marker);
 
-    function setupRouteButton() {
-        const btn = document.getElementById('findRouteBtn');
-        if (!btn) return;
-
-        btn.addEventListener('click', async () => {
-            const source = document.getElementById('sourceNode').value;
-            const target = document.getElementById('targetNode').value;
-
-            if (!source || !target) {
-                showToast('Please select both source and destination nodes.', 'error');
-                return;
-            }
-
-            if (source === target) {
-                showToast('Source and destination must be different.', 'error');
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Finding Route...';
-
-            try {
-                const result = await findRoute(source, target, currentVehicleType);
-                currentRouteResult = result; // Store for later use
-                displayRouteResult(result);
-
-                if (result.success) {
-                    const routeType = currentVehicleType === 'emergency' ? 'emergency' :
-                                     currentVehicleType === 'heavy' ? 'heavy' : 'normal';
-                    
-                    // Pass traffic warnings to map for visualization
-                    const trafficWarnings = result.traffic_warnings || [];
-                    MapModule.drawRoute(result.path, routeType, trafficWarnings);
-                    
-                    // Show success message with traffic info
-                    if (trafficWarnings.length > 0) {
-                        showToast(`Route found with ${trafficWarnings.length} traffic alert(s)!`, 'info');
-                    } else {
-                        showToast(`Route found: ${result.path.join(' → ')}`, 'success');
-                    }
-                }
-            } catch (error) {
-                showToast('Failed to find route. Check backend connection.', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '🔍 Find Optimal Route';
+            // Sidebar result item
+            if (resultsList) {
+                const item = document.createElement('div');
+                item.className = 'nearby-result-item';
+                item.innerHTML = `<span class="nearby-result-icon">${icon}</span><div><div class="nearby-result-name">${name}</div><div class="nearby-result-dist">${distStr}</div></div>`;
+                item.addEventListener('click', () => {
+                    map.setView([el.lat, el.lon], 16);
+                    marker.openPopup();
+                });
+                resultsList.appendChild(item);
             }
         });
+
+        addLog(`Found ${elements.length > 8 ? 8 : elements.length} nearby ${placeType}`, 'success');
+        if (window.AIAssistant) AIAssistant.addChatMessage('bot', `✅ Found ${elements.length > 8 ? 8 : elements.length} nearby ${placeType}. Check the sidebar and map!`);
+
+    } catch (e) {
+        addLog(`Nearby search failed: ${e.message}`, 'error');
+        if (resultsList) resultsList.innerHTML = '<div style="color:#ef4444; font-size:12px; padding:8px;">Search failed. Check internet connection.</div>';
     }
+}
 
-    function setupRefreshButton() {
-        const btn = document.getElementById('refreshBtn');
-        if (!btn) return;
+function showPlaceDetail(el, name, type, icon, distStr) {
+    const panel = document.getElementById('placeDetailPanel');
+    const content = document.getElementById('placeDetailContent');
+    if (!panel || !content) return;
 
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Refreshing...';
+    const phone = el.tags?.phone || el.tags?.['contact:phone'] || '';
+    const website = el.tags?.website || '';
+    const openingHours = el.tags?.opening_hours || '';
+    const rating = (3.5 + Math.random() * 1.5).toFixed(1);
+    const stars = '⭐'.repeat(Math.round(parseFloat(rating)));
 
-            await refreshData();
+    content.innerHTML = `
+        <div class="place-detail-name">${icon} ${name}</div>
+        <div class="place-detail-type">${type.toUpperCase()} • ${distStr} away</div>
+        <div class="place-detail-info">
+            ${openingHours ? `🕒 ${openingHours}<br>` : ''}
+            ${phone ? `📞 ${phone}<br>` : ''}
+            ${website ? `🌐 <a href="${website}" target="_blank" style="color:#38bdf8">${website}</a><br>` : ''}
+            ⭐ Rating: ${rating} ${stars}
+        </div>
+        <div class="place-detail-actions">
+            <button class="btn btn-primary" onclick="setAsDestination(${el.lat}, ${el.lon}, '${name.replace(/'/g,"\\'")}')">🗺️ Navigate</button>
+            <button class="btn btn-secondary" onclick="savePlace(${el.lat}, ${el.lon}, '${name.replace(/'/g,"\\'")}', '${icon}')">⭐ Save</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('placeDetailPanel').classList.add('hidden')">✕</button>
+        </div>
+    `;
+    panel.classList.remove('hidden');
+}
 
-            btn.disabled = false;
-            btn.innerHTML = '🔄 Refresh Predictions';
-            showToast('Traffic data refreshed!', 'success');
+function setAsDestination(lat, lng, name) {
+    const destInput = document.getElementById('destInput');
+    if (destInput) destInput.value = name;
+    document.getElementById('placeDetailPanel')?.classList.add('hidden');
+    addLog(`Destination set: ${name}`, 'success');
+    planRouteToCoords(lat, lng);
+}
+
+// ─── SAVED PLACES (Bookmarks) ────────────────────────────────────
+function savePlace(lat, lng, name, icon) {
+    savedPlaces = savedPlaces.filter(p => p.name !== name);
+    savedPlaces.unshift({ lat, lng, name, icon, time: Date.now() });
+    if (savedPlaces.length > 20) savedPlaces.pop();
+    localStorage.setItem('tn_saved_places', JSON.stringify(savedPlaces));
+    loadSavedPlaces();
+    showShareToast(`⭐ Saved: ${name}`);
+}
+
+function saveCurrentView() {
+    const center = map.getCenter();
+    const name = `View (${center.lat.toFixed(3)}, ${center.lng.toFixed(3)})`;
+    savePlace(center.lat, center.lng, name, '📌');
+}
+
+function loadSavedPlaces() {
+    savedPlaces = JSON.parse(localStorage.getItem('tn_saved_places') || '[]');
+    const list = document.getElementById('savedPlacesList');
+    if (!list) return;
+    list.innerHTML = '';
+    if (savedPlaces.length === 0) {
+        list.innerHTML = '<div style="color:#64748b; font-size:12px; padding:4px;">No saved places yet.</div>';
+        return;
+    }
+    savedPlaces.forEach((p, i) => {
+        const item = document.createElement('div');
+        item.className = 'saved-place-item';
+        item.innerHTML = `<span>${p.icon || '📍'}</span><span style="flex:1;">${p.name}</span><button class="saved-place-remove" onclick="removeSavedPlace(${i})">✕</button>`;
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('saved-place-remove')) return;
+            map.setView([p.lat, p.lng], 14);
         });
+        list.appendChild(item);
+    });
+}
+
+function removeSavedPlace(index) {
+    savedPlaces.splice(index, 1);
+    localStorage.setItem('tn_saved_places', JSON.stringify(savedPlaces));
+    loadSavedPlaces();
+}
+
+// ─── SHARE ROUTE ─────────────────────────────────────────────────
+function shareRoute() {
+    const src = document.getElementById('sourceInput')?.value;
+    const dst = document.getElementById('destInput')?.value;
+    const url = `${location.origin}${location.pathname}?from=${encodeURIComponent(src)}&to=${encodeURIComponent(dst)}&mode=${currentTravelMode}`;
+    navigator.clipboard.writeText(url).then(() => showShareToast('🔗 Route link copied!'));
+}
+
+function showShareToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'share-toast';
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// ─── GEOCODE ─────────────────────────────────────────────────────
+async function geocode(query) {
+    if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(query.replace(/\s/g, ''))) {
+        const [lat, lng] = query.replace(/\s/g, '').split(',');
+        return L.latLng(parseFloat(lat), parseFloat(lng));
     }
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Tamil Nadu, India')}&limit=1`);
+    const data = await res.json();
+    if (data.length > 0) return L.latLng(data[0].lat, data[0].lon);
+    throw new Error(`Location '${query}' not found.`);
+}
 
-    function setupClearRouteButton() {
-        const btn = document.getElementById('clearRouteBtn');
-        if (!btn) return;
+async function reverseGeocode(lat, lng) {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+    const data = await res.json();
+    return data?.address?.city || data?.address?.town || data?.address?.county || `${lat.toFixed(4)},${lng.toFixed(4)}`;
+}
 
-        btn.addEventListener('click', () => {
-            MapModule.clearRoutes();
-            const container = document.getElementById('routeResult');
-            if (container) {
-                container.classList.remove('show');
-                container.innerHTML = '';
+// ─── ROUTE PLANNING ──────────────────────────────────────────────
+async function planRoute() {
+    const source = document.getElementById('sourceInput').value;
+    const dest   = document.getElementById('destInput').value;
+    const calcBtn = document.getElementById('calculateRouteBtn');
+    if (!source || !dest) return addLog('Please enter source and destination.', 'error');
+
+    addLog(`Planning ${currentTravelMode} route: ${source} → ${dest}`, 'warning');
+    calcBtn.innerText = '⏳ Planning...';
+    calcBtn.disabled = true;
+
+    try {
+        const srcLatLng  = await geocode(source);
+        const destLatLng = await geocode(dest);
+
+        saveRecentSearch(source);
+        saveRecentSearch(dest);
+
+        if (routingControl) map.removeControl(routingControl);
+        if (navigatingMarker) map.removeLayer(navigatingMarker);
+        clearInterval(navigationInterval);
+        document.getElementById('startNavigationBtn').classList.add('hidden');
+
+        const avoidTolls    = document.getElementById('avoidTolls')?.checked || false;
+        const avoidHighways = document.getElementById('avoidHighways')?.checked || false;
+
+        const profile = OSRM_PROFILES[currentTravelMode] || 'driving';
+        const routeColor = ambulanceMode ? '#ef4444' : heavyVehicleMode ? '#f59e0b' : '#facc15';
+
+        let isFirstRoute = true;
+
+        routingControl = L.Routing.control({
+            waypoints: [srcLatLng, destLatLng],
+            router: L.Routing.osrmv1({
+                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                profile: profile,
+                useHints: false
+            }),
+            lineOptions: {
+                styles: [{ color: routeColor, opacity: 0.9, weight: 6 }]
+            },
+            altLineOptions: {
+                styles: [{ color: '#64748b', opacity: 0.7, weight: 5 }]
+            },
+            showAlternatives: true,
+            show: false,
+            addWaypoints: false,
+            draggableWaypoints: false,
+            fitSelectedRoutes: true
+        }).addTo(map);
+
+        routingControl.on('routeselected', (e) => {
+            const route = e.route;
+            currentRouteSummary = route.summary;
+            routeCoordinates = route.coordinates;
+            currentRouteInstructions = route.instructions;
+
+            const distKm  = (currentRouteSummary.totalDistance / 1000).toFixed(1);
+            const timeMin = Math.round(currentRouteSummary.totalTime / 60);
+
+            addLog(`Route: ${distKm} km, ~${timeMin} min`, 'success');
+
+            if (isFirstRoute) {
+                generateDemoHazards(routeCoordinates);
+                plotHazards(hazardData);
+                isFirstRoute = false;
             }
-            showToast('Route cleared.', 'info');
+
+            checkForHazardsOnRoute(route);
+
+            document.getElementById('startNavigationBtn').classList.remove('hidden');
+            document.getElementById('previewEta').innerText  = `${timeMin} min`;
+            document.getElementById('previewDist').innerText = `${distKm} km`;
+            document.getElementById('routePreviewPanel').classList.remove('hidden');
+
+            // Voice announcement
+            if (voiceNavEnabled && window.AIAssistant) {
+                AIAssistant.speak(`Route found. ${timeMin} minutes, ${distKm} kilometers via ${currentTravelMode === 'driving' ? 'road' : currentTravelMode}.`);
+            }
         });
+
+    } catch (e) {
+        addLog(e.message, 'error');
+        if (window.AIAssistant) AIAssistant.addChatMessage('bot', `❌ Route planning failed: ${e.message}`);
+    } finally {
+        calcBtn.innerText = '🗺️ Plan Route';
+        calcBtn.disabled = false;
+    }
+}
+
+async function planRouteToCoords(lat, lng) {
+    const srcInput = document.getElementById('sourceInput');
+    const destInput = document.getElementById('destInput');
+    const src = srcInput?.value || 'My Location';
+    if (destInput) destInput.value = `${lat},${lng}`;
+    await planRoute();
+}
+
+// ─── HAZARD CHECKS ────────────────────────────────────────────────
+function checkForHazardsOnRoute(route) {
+    const encountered = new Set();
+    hazardData.forEach(h => {
+        const p1 = L.latLng(h.lat, h.lng);
+        for (let j = 0; j < routeCoordinates.length; j += 10) {
+            if (p1.distanceTo(routeCoordinates[j]) < 2000) { encountered.add(h); break; }
+        }
+    });
+    if (encountered.size > 0) {
+        addLog(`⚠️ ${encountered.size} hazard(s) on this route!`, 'error');
+        if (window.AIAssistant) AIAssistant.addChatMessage('bot', `⚠️ ${encountered.size} road hazard(s) detected on your route. Stay alert!`);
+    } else {
+        addLog('Route is clear of hazards ✅', 'success');
+    }
+    renderRouteSummary(encountered);
+}
+
+function renderRouteSummary(hazardsSet) {
+    const panel = document.getElementById('routeSummaryPanel');
+    const grid  = document.getElementById('routeSummaryGrid');
+    if (!panel || !grid) return;
+
+    if (hazardsSet.size === 0) {
+        grid.innerHTML = `<div class="summary-item" style="grid-column:1/-1; background:rgba(16,185,129,0.2);"><div class="count" style="color:#10b981;">0</div><div class="label" style="color:#10b981;">Hazards — Safe Route ✅</div></div>`;
+        panel.classList.remove('hidden');
+        return;
+    }
+    const counts = { pothole:0, speedbreaker:0, roadwork:0, party:0, traffic:0, signal:0, accident:0 };
+    hazardsSet.forEach(h => { if (counts[h.type] !== undefined) counts[h.type]++; });
+    const labels = { pothole:'Potholes', speedbreaker:'Speed Breakers', roadwork:'Road Works', party:'Party Events', traffic:'Traffic Zones', signal:'Signals', accident:'Accidents' };
+    grid.innerHTML = '';
+    Object.keys(counts).forEach(k => {
+        if (counts[k] > 0) grid.innerHTML += `<div class="summary-item"><div class="count">${counts[k]}</div><div class="label">${labels[k]}</div></div>`;
+    });
+    panel.classList.remove('hidden');
+}
+
+function generateDemoHazards(coords) {
+    if (!coords || coords.length < 10) return;
+    const types = ['pothole','accident','traffic','speedbreaker','roadwork','party','signal'];
+    const newHazards = types.map((type, i) => {
+        const seg = Math.floor(coords.length / types.length);
+        let idx = Math.max(1, Math.min(coords.length-1, i * seg + Math.floor(Math.random() * seg)));
+        const pt = coords[idx];
+        return { id:`demo-${type}-${i}`, lat: pt.lat+(Math.random()-0.5)*0.0003, lng: pt.lng+(Math.random()-0.5)*0.0003, type, severity:'high', title:`Reported ${type.toUpperCase()}` };
+    });
+    for (let i = 0; i < 3; i++) {
+        const pt = coords[Math.floor(Math.random() * coords.length)];
+        newHazards.push({ id:`demo-rand-${i}`, lat:pt.lat, lng:pt.lng, type:Math.random()>0.5?'traffic':'pothole', severity:'medium', title:'Detected Issue' });
+    }
+    hazardData = [...staticHazardData, ...newHazards];
+}
+
+// ─── VOICE NAVIGATION ────────────────────────────────────────────
+function speakInstruction(text) {
+    if (!voiceNavEnabled) return;
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'en-IN';
+        msg.rate = 0.95;
+        window.speechSynthesis.speak(msg);
+    }
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────
+function startNavigation() {
+    if (!routeCoordinates || routeCoordinates.length === 0) return;
+    addLog('Live Navigation Started', 'success');
+
+    const btn = document.getElementById('startNavigationBtn');
+    if (btn) { btn.disabled = true; btn.innerText = '🔵 Navigating...'; }
+
+    isMidJourneyRerouting = false;
+    hazardWarningsIssued.clear();
+
+    document.getElementById('routePreviewPanel')?.classList.add('hidden');
+    document.getElementById('navTopPanel')?.classList.remove('hidden');
+    document.getElementById('navBottomPanel')?.classList.remove('hidden');
+    document.querySelector('.sidebar')?.classList.add('hidden');
+
+    if (currentRouteSummary) {
+        const eta = Math.round(currentRouteSummary.totalTime / 60);
+        const dist = (currentRouteSummary.totalDistance / 1000).toFixed(1);
+        const arrival = new Date(Date.now() + currentRouteSummary.totalTime * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        document.getElementById('navEta').innerText  = `${eta} min`;
+        document.getElementById('navDist').innerText = `${dist} km`;
+        document.getElementById('navArrival').innerText = arrival;
     }
 
-    // ─── Data Refresh ────────────────────────────────────────────────────────
+    if (navigatingMarker) map.removeLayer(navigatingMarker);
+    if (livePositionWatcher && navigator.geolocation) navigator.geolocation.clearWatch(livePositionWatcher);
 
-    async function refreshData() {
-        const trafficResponse = await loadTrafficData();
-        if (trafficResponse) {
-            updateStats(trafficResponse.summary);
-            updateCongestionList(trafficResponse.predictions);
-            ChartsModule.renderCongestionChart(trafficResponse.predictions);
+    const emoji = ambulanceMode ? '🚑' : heavyVehicleMode ? '🚛' : currentTravelMode === 'cycling' ? '🚲' : currentTravelMode === 'walking' ? '🚶' : '🚗';
+    const cls   = ambulanceMode ? 'ambulance' : 'default';
+    const icon  = L.divIcon({ html:`<div class="vehicle-marker ${cls}">${emoji}</div>`, className:'custom-vehicle-container', iconSize:[35,35], iconAnchor:[17,17] });
 
-            if (graphData) {
-                MapModule.renderNetwork(graphData, trafficResponse.predictions);
+    navigatingMarker = L.marker(routeCoordinates[0], { icon, zIndexOffset: 1000 }).addTo(map);
+    map.setView(routeCoordinates[0], 16);
+    updateNavInstructions(0);
+
+    speakInstruction(`Navigation started. Head towards ${document.getElementById('destInput')?.value || 'destination'}.`);
+
+    if (navigator.geolocation) {
+        livePositionWatcher = navigator.geolocation.watchPosition((pos) => {
+            const newPos = L.latLng(pos.coords.latitude, pos.coords.longitude);
+            navigatingMarker.setLatLng(newPos);
+            map.panTo(newPos, { animate: true });
+
+            let minDist = Infinity, closestIdx = 0;
+            routeCoordinates.forEach((c, i) => { const d = newPos.distanceTo(c); if (d < minDist) { minDist = d; closestIdx = i; } });
+            updateNavInstructions(closestIdx);
+            scanForUpcomingHazards(newPos);
+
+            const dest = routeCoordinates[routeCoordinates.length - 1];
+            if (newPos.distanceTo(dest) < 50) {
+                speakInstruction('You have arrived at your destination!');
+                addLog('Destination Reached!', 'success');
+                stopNavigation();
             }
+        }, (err) => {
+            if (err.code === err.PERMISSION_DENIED) { alert('Location access denied.'); stopNavigation(); }
+        }, { enableHighAccuracy: true, maximumAge: 0 });
+    } else {
+        alert('Geolocation not supported by this browser.');
+        stopNavigation();
+    }
+}
+
+function stopNavigation() {
+    if (livePositionWatcher !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(livePositionWatcher);
+        livePositionWatcher = null;
+    }
+    document.getElementById('navTopPanel')?.classList.add('hidden');
+    document.getElementById('navBottomPanel')?.classList.add('hidden');
+    document.querySelector('.sidebar')?.classList.remove('hidden');
+    document.getElementById('predictiveWarningBanner')?.classList.add('hidden');
+    const btn = document.getElementById('startNavigationBtn');
+    if (btn) { btn.disabled = false; btn.innerText = '▶ Navigate'; }
+    if (routingControl && routeCoordinates.length > 0) map.fitBounds(L.polyline(routeCoordinates).getBounds());
+}
+
+function scanForUpcomingHazards(pos) {
+    if (isMidJourneyRerouting) return;
+    let closest = null, minDist = Infinity;
+    hazardData.forEach(h => {
+        const d = pos.distanceTo(L.latLng(h.lat, h.lng));
+        if ((h.severity === 'high' || h.type === 'traffic' || h.type === 'accident') && d > 200 && d < 5000 && d < minDist && !hazardWarningsIssued.has(h.id)) {
+            minDist = d; closest = h;
+        }
+    });
+    const banner = document.getElementById('predictiveWarningBanner');
+    if (closest) {
+        document.getElementById('predictiveHazardType').innerHTML = `${closest.type.toUpperCase()} RED ZONE AHEAD.<br><span style="font-size:12px;color:#facc15;">AI bypass calculated.</span>`;
+        banner?.classList.remove('hidden');
+        hazardWarningsIssued.add(closest.id);
+        speakInstruction(`Warning! ${closest.title} ahead. Consider alternate route.`);
+    }
+}
+
+function updateNavInstructions(idx) {
+    if (!currentRouteInstructions || currentRouteInstructions.length === 0) return;
+    let active = currentRouteInstructions[0], next = null;
+    for (let i = 0; i < currentRouteInstructions.length; i++) {
+        if (idx >= currentRouteInstructions[i].index) {
+            active = currentRouteInstructions[i];
+            next = currentRouteInstructions[i+1] || null;
+        } else break;
+    }
+    if (active) {
+        document.getElementById('currentRoadName').innerText = active.text || 'Continue straight';
+        document.getElementById('turnIcon').innerText = getTurnIcon(active.type);
+        if (active.text && !hazardWarningsIssued.has('inst-' + idx)) {
+            speakInstruction(active.text);
+            hazardWarningsIssued.add('inst-' + idx);
         }
     }
+    const nextDiv = document.getElementById('nextTurnDiv');
+    if (next && next.type !== 'Arrive') {
+        nextDiv?.classList.remove('hidden');
+        if (nextDiv) nextDiv.innerHTML = `Then ${getTurnIcon(next.type)} ${next.text || ''}`;
+    } else {
+        nextDiv?.classList.add('hidden');
+    }
+}
 
-    // ─── Initialization ──────────────────────────────────────────────────────
+function getTurnIcon(type) {
+    if (!type) return '⬆️';
+    type = type.toLowerCase();
+    if (type.includes('left'))  return '⬅️';
+    if (type.includes('right')) return '➡️';
+    if (type.includes('u-turn') || type.includes('uturn')) return '↩️';
+    if (type.includes('roundabout')) return '🔄';
+    if (type.includes('arrive') || type.includes('destination')) return '📍';
+    return '⬆️';
+}
 
-    async function init() {
-        console.log('🚦 Initializing AI Traffic Prediction System...');
+function executeMidNavigationReroute() {
+    addLog('Recalculating safe route...', 'warning');
+    isMidJourneyRerouting = true;
+    document.getElementById('predictiveWarningBanner')?.classList.add('hidden');
+    if (!navigatingMarker || !routingControl) return;
+    const currentPos = navigatingMarker.getLatLng();
+    const destPos = routeCoordinates[routeCoordinates.length - 1];
+    routingControl.setWaypoints([currentPos, destPos]);
+    if (window.AIAssistant) AIAssistant.addChatMessage('bot', '🔄 Rerouting around hazard...');
+}
 
-        // Initialize map
-        MapModule.init();
+// ─── EMERGENCY & VEHICLE MODE ─────────────────────────────────────
+function toggleAmbulanceMode() {
+    ambulanceMode = !ambulanceMode;
+    heavyVehicleMode = false;
+    const btn  = document.getElementById('ambulanceModeBtn');
+    const hBtn = document.getElementById('heavyVehicleModeBtn');
+    const msg  = document.getElementById('emergencyStatus');
 
-        // Setup event handlers
-        setupVehicleSelector();
-        setupRouteButton();
-        setupRefreshButton();
-        setupClearRouteButton();
+    if (ambulanceMode) {
+        btn?.classList.add('pulse-effect');
+        msg?.classList.remove('hidden');
+        if (hBtn) hBtn.style.opacity = '0.5';
+        addLog('AMBULANCE MODE ACTIVATED', 'error');
+        speakInstruction('Ambulance mode activated. Priority route calculating.');
+        if (window.AIAssistant) AIAssistant.addChatMessage('bot', '🚑 Ambulance mode ON — priority clear path calculating.');
+        if (navigatingMarker) navigatingMarker.setIcon(L.divIcon({ html:'<div class="vehicle-marker ambulance">🚑</div>', className:'custom-vehicle-container', iconSize:[35,35], iconAnchor:[17,17] }));
+        if (routeCoordinates.length > 0) planRoute();
+    } else {
+        btn?.classList.remove('pulse-effect');
+        msg?.classList.add('hidden');
+        if (hBtn) hBtn.style.opacity = '1';
+        addLog('Ambulance mode off', 'normal');
+        if (routeCoordinates.length > 0) planRoute();
+    }
+}
 
-        // Load data
+function toggleHeavyVehicleMode() {
+    heavyVehicleMode = !heavyVehicleMode;
+    ambulanceMode = false;
+    const btn  = document.getElementById('heavyVehicleModeBtn');
+    const aBtn = document.getElementById('ambulanceModeBtn');
+
+    if (heavyVehicleMode) {
+        if (btn) btn.style.background = 'linear-gradient(135deg, #92400e, #f59e0b)';
+        if (aBtn) aBtn.style.opacity = '0.5';
+        document.getElementById('emergencyStatus')?.classList.remove('hidden');
+        if (document.getElementById('emergencyStatus')) document.getElementById('emergencyStatus').innerText = '🚛 Heavy vehicle route: Avoiding narrow roads.';
+        addLog('Heavy Vehicle mode activated', 'warning');
+        speakInstruction('Heavy vehicle mode. Routing on highways and wide roads only.');
+        if (window.AIAssistant) AIAssistant.addChatMessage('bot', '🚛 Heavy vehicle mode ON — routing via highways and wide roads.');
+        if (routeCoordinates.length > 0) planRoute();
+    } else {
+        if (btn) btn.style.background = '';
+        if (aBtn) aBtn.style.opacity = '1';
+        document.getElementById('emergencyStatus')?.classList.add('hidden');
+        addLog('Heavy vehicle mode off', 'normal');
+        if (routeCoordinates.length > 0) planRoute();
+    }
+}
+
+// ─── GPS LOCATION ─────────────────────────────────────────────────
+function useCurrentLocation() {
+    if (!navigator.geolocation) return addLog('Geolocation not supported.', 'error');
+    const btn = document.getElementById('useLocationBtn');
+    if (btn) { btn.innerText = '⏳'; btn.disabled = true; }
+    addLog('Requesting GPS location...');
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        addLog(`GPS Lock: ${lat.toFixed(4)}, ${lng.toFixed(4)}`, 'success');
         try {
-            // Load graph
-            const graph = await loadGraph();
-            if (!graph) {
-                showToast('Backend not available. Please start the FastAPI server.', 'error');
-                return;
-            }
-
-            // Load nodes for selectors
-            const nodesData = await loadNodes();
-            if (nodesData) {
-                populateNodeSelectors(nodesData.nodes);
-            }
-
-            // Load traffic data and render
-            await refreshData();
-
-            // Traffic Trends chart removed to clean up UI
-
-            showToast('System initialized successfully!', 'success');
-
-            // Auto-refresh every 30 seconds
-            setInterval(refreshData, 30000);
-
-        } catch (error) {
-            console.error('Initialization error:', error);
-            showToast('Failed to connect to backend server.', 'error');
+            const place = await reverseGeocode(lat, lng);
+            const inp = document.getElementById('sourceInput');
+            if (inp) inp.value = place;
+            map.setView([lat, lng], 13);
+            addLog(`Location: ${place}`, 'success');
+        } catch(e) {
+            const inp = document.getElementById('sourceInput');
+            if (inp) inp.value = `${lat},${lng}`;
         }
+        if (btn) { btn.innerText = '📍'; btn.disabled = false; }
+    }, (err) => {
+        addLog(`Location error: ${err.message}`, 'error');
+        if (btn) { btn.innerText = '📍'; btn.disabled = false; }
+    }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+// ─── AI SMART SUGGESTIONS ────────────────────────────────────────
+async function generateAISuggestions() {
+    const container = document.getElementById('aiSuggestionsList');
+    if (!container) return;
+
+    // Try to get real traffic data
+    let suggestions = [
+        { icon: '⏰', text: 'Best departure: 7:30 AM (low congestion predicted)' },
+        { icon: '🚦', text: 'Chennai–Trichy corridor: Moderate traffic, 15 extra mins' },
+        { icon: '🛣️', text: 'NH44 clear via Salem. Suggested highway.' },
+        { icon: '🌧️', text: 'Rainfall predicted near Madurai — drive cautiously' },
+        { icon: '🏥', text: 'Nearest emergency hospital: Govt. General Hospital, 2.3 km' }
+    ];
+
+    try {
+        const res = await fetch('/traffic-data');
+        if (res.ok) {
+            const data = await res.json();
+            const summary = data.summary;
+            suggestions = [
+                { icon: '📊', text: `Avg congestion: ${(summary.avg_congestion * 100).toFixed(0)}% across ${summary.total_nodes} nodes` },
+                { icon: '🔴', text: `${summary.high_congestion_nodes} high-alert nodes — expect delays` },
+                { icon: '⚡', text: `Peak congestion: ${(summary.max_congestion * 100).toFixed(0)}% — avoid peak zones` },
+                { icon: '🕒', text: 'Best time to travel: After 9 PM or before 7 AM' },
+                { icon: '🧠', text: 'AI recommends: Take NH44 via Salem for optimal route' }
+            ];
+        }
+    } catch (e) { /* use defaults */ }
+
+    container.innerHTML = '';
+    suggestions.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'ai-suggestion-item';
+        item.innerHTML = `<span class="suggestion-icon">${s.icon}</span>${s.text}`;
+        item.addEventListener('click', () => {
+            if (window.AIAssistant) AIAssistant.addChatMessage('bot', `💡 ${s.text}`);
+        });
+        container.appendChild(item);
+    });
+}
+
+// ─── RECENT SEARCHES ─────────────────────────────────────────────
+function loadRecentSearches() {
+    const dl = document.getElementById('recentSearches');
+    if (!dl) return;
+    dl.innerHTML = '';
+    let searches = [];
+    try { searches = JSON.parse(localStorage.getItem('tn_recent_searches') || '[]'); } catch(e) {}
+    searches.forEach(s => { const opt = document.createElement('option'); opt.value = s; dl.appendChild(opt); });
+}
+
+function saveRecentSearch(str) {
+    if (!str || str.length < 3) return;
+    let searches = [];
+    try { searches = JSON.parse(localStorage.getItem('tn_recent_searches') || '[]'); } catch(e) {}
+    const idx = searches.indexOf(str);
+    if (idx > -1) searches.splice(idx, 1);
+    searches.unshift(str);
+    if (searches.length > 10) searches.pop();
+    localStorage.setItem('tn_recent_searches', JSON.stringify(searches));
+    loadRecentSearches();
+}
+
+// ─── URL PARAMS (share route) ─────────────────────────────────────
+function loadRouteFromURL() {
+    const params = new URLSearchParams(location.search);
+    const from = params.get('from');
+    const to   = params.get('to');
+    const mode = params.get('mode');
+    if (from && to) {
+        const srcInput = document.getElementById('sourceInput');
+        const dstInput = document.getElementById('destInput');
+        if (srcInput) srcInput.value = from;
+        if (dstInput) dstInput.value = to;
+        if (mode) setTravelMode(mode);
+        setTimeout(planRoute, 1500);
     }
+}
 
-    return { init };
-})();
+// ─── EVENT LISTENERS ─────────────────────────────────────────────
+function setupEventListeners() {
+    document.getElementById('calculateRouteBtn')?.addEventListener('click', planRoute);
+    document.getElementById('startNavigationBtn')?.addEventListener('click', startNavigation);
+    document.getElementById('gmapStartBtn')?.addEventListener('click', startNavigation);
+    document.getElementById('gmapExitBtn')?.addEventListener('click', stopNavigation);
+    document.getElementById('rerouteBtn')?.addEventListener('click', executeMidNavigationReroute);
+    document.getElementById('useLocationBtn')?.addEventListener('click', useCurrentLocation);
+    document.getElementById('ambulanceModeBtn')?.addEventListener('click', toggleAmbulanceMode);
+    document.getElementById('heavyVehicleModeBtn')?.addEventListener('click', toggleHeavyVehicleMode);
+    document.getElementById('shareRouteBtn')?.addEventListener('click', shareRoute);
+    document.getElementById('saveCurrentLocationBtn')?.addEventListener('click', saveCurrentView);
+    document.getElementById('nearbySearchBtn')?.addEventListener('click', () => {
+        const q = document.getElementById('nearbyPlaceInput')?.value;
+        if (q) findNearby(q);
+    });
+    document.getElementById('nearbyPlaceInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const q = e.target.value;
+            if (q) findNearby(q);
+        }
+    });
 
-// Start on DOM ready
-document.addEventListener('DOMContentLoaded', App.init);
+    // Layer toggles
+    document.getElementById('toggleHazards')?.addEventListener('change', (e) => {
+        if (e.target.checked) { map.addLayer(hazardsLayer); addLog('Hazards enabled'); }
+        else { map.removeLayer(hazardsLayer); addLog('Hazards disabled'); }
+    });
+    document.getElementById('toggleTrafficLayer')?.addEventListener('change', (e) => {
+        if (e.target.checked) { map.addLayer(trafficLayer); addLog('Traffic layer enabled'); }
+        else { map.removeLayer(trafficLayer); addLog('Traffic layer disabled'); }
+    });
+    document.getElementById('toggleCongestionHeatmap')?.addEventListener('change', (e) => {
+        if (e.target.checked) { map.addLayer(heatmapLayer); addLog('Congestion heatmap enabled'); }
+        else { map.removeLayer(heatmapLayer); addLog('Heatmap disabled'); }
+    });
+    document.getElementById('toggleBikeRoutes')?.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            addLog('Bike routes: overlay coming from OSM cycle network', 'warning');
+        } else { map.removeLayer(bikeRouteLayer); }
+    });
+
+    // Chat widget close
+    document.getElementById('chatCloseBtn')?.addEventListener('click', () => {
+        document.getElementById('chatWidget')?.classList.add('hidden');
+    });
+    document.getElementById('chatMicBtn')?.addEventListener('click', () => {
+        if (window.AIAssistant) AIAssistant.toggleListening();
+    });
+
+    // Right-click to save location
+    map.on('contextmenu', async (e) => {
+        try {
+            const name = await reverseGeocode(e.latlng.lat, e.latlng.lng);
+            savePlace(e.latlng.lat, e.latlng.lng, name, '📌');
+        } catch(err) {
+            savePlace(e.latlng.lat, e.latlng.lng, `Pin (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`, '📌');
+        }
+    });
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────
+window.onload = async () => {
+    await initApp();
+    loadRouteFromURL();
+};

@@ -1,0 +1,425 @@
+/* =============================================
+   features.css — Google Maps Feature Additions
+   ============================================= */
+
+/* ── Sidebar Scroll ── */
+.sidebar {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(56,189,248,0.3) transparent;
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 4px; }
+
+/* ── Map Type Switcher ── */
+.map-type-section { margin-bottom: 1.2rem; }
+.map-type-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+.map-type-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 4px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: #cbd5e1;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-family);
+    transition: all 0.25s;
+}
+.map-type-btn:hover {
+    background: rgba(56,189,248,0.15);
+    border-color: rgba(56,189,248,0.4);
+    color: #fff;
+}
+.map-type-btn.active {
+    background: linear-gradient(135deg, rgba(2,132,199,0.4), rgba(56,189,248,0.3));
+    border-color: #38bdf8;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(56,189,248,0.2);
+}
+.map-type-icon { font-size: 18px; }
+
+/* ── Travel Mode ── */
+.travel-mode-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+}
+.travel-mode-btn {
+    padding: 8px 4px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: #cbd5e1;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-family);
+    transition: all 0.25s;
+    text-align: center;
+}
+.travel-mode-btn:hover { background: rgba(255,255,255,0.15); color:#fff; }
+.travel-mode-btn.active {
+    background: linear-gradient(135deg, rgba(5,150,105,0.4), rgba(16,185,129,0.3));
+    border-color: #10b981;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(16,185,129,0.2);
+}
+
+/* ── Route Options Row ── */
+.route-options-row {
+    display: flex;
+    gap: 12px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+.route-options-row .toggle-switch { font-size: 12px; }
+
+/* ── Overlay Grid ── */
+.overlay-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 12px;
+}
+.overlay-grid .toggle-switch { font-size: 12px; }
+
+/* ── Nearby Quick Buttons ── */
+.nearby-quick-btns {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.nearby-quick-btn {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 6px 2px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: white;
+}
+.nearby-quick-btn:hover {
+    background: rgba(56,189,248,0.2);
+    border-color: #38bdf8;
+    transform: scale(1.1);
+}
+
+/* ── Nearby Results List ── */
+.nearby-results {
+    max-height: 160px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(56,189,248,0.3) transparent;
+}
+.nearby-result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    background: rgba(15,23,42,0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 13px;
+}
+.nearby-result-item:hover {
+    background: rgba(56,189,248,0.1);
+    border-color: rgba(56,189,248,0.3);
+}
+.nearby-result-icon { font-size: 18px; min-width: 24px; }
+.nearby-result-name { font-weight: 600; color: #f1f5f9; font-size: 12px; }
+.nearby-result-dist { font-size: 11px; color: #94a3b8; }
+
+/* ── Saved Places ── */
+.saved-places-list { max-height: 120px; overflow-y: auto; }
+.saved-place-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    background: rgba(15,23,42,0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.saved-place-item:hover { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); }
+.saved-place-remove {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+}
+
+/* ── Vehicle Mode Row ── */
+.vehicle-mode-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.vehicle-mode-row .btn { font-size: 12px; padding: 8px 6px; }
+
+/* ── AI Suggestions ── */
+.ai-suggestions-list { display: flex; flex-direction: column; gap: 6px; }
+.ai-suggestion-item {
+    background: rgba(56,189,248,0.07);
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.4;
+}
+.ai-suggestion-item.loading { color: #64748b; font-style: italic; animation: pulse-subtle 2s infinite; }
+.ai-suggestion-item:hover { background: rgba(56,189,248,0.15); border-color: #38bdf8; color: #fff; }
+.ai-suggestion-item .suggestion-icon { font-size: 16px; margin-right: 6px; }
+@keyframes pulse-subtle {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* ── Place Detail Panel ── */
+.place-detail-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 5000;
+    width: 300px;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(15,23,42,0.95);
+}
+.place-detail-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+}
+.place-detail-close:hover { color: #fff; }
+.place-detail-name { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+.place-detail-type { font-size: 12px; color: #38bdf8; margin-bottom: 10px; }
+.place-detail-info { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+.place-detail-actions { display: flex; gap: 8px; margin-top: 14px; }
+.place-detail-actions .btn { font-size: 12px; padding: 8px; }
+
+/* ── Search Along Route Panel ── */
+.search-along-panel {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5000;
+    width: 90%;
+    max-width: 500px;
+    padding: 16px 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(15,23,42,0.95);
+    max-height: 250px;
+    overflow-y: auto;
+    font-size: 13px;
+}
+
+/* ── AIFloating Chat ── */
+.chat-fab {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0f172a, #1e3a5f);
+    border: 2px solid #38bdf8;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(56,189,248,0.4);
+    position: relative;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.chat-fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(56,189,248,0.6);
+}
+.chat-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+.chat-widget {
+    position: absolute;
+    bottom: 72px;
+    right: 0;
+    width: 320px;
+    background: rgba(15,23,42,0.97);
+    border: 1px solid rgba(56,189,248,0.3);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(90deg, rgba(2,132,199,0.3), rgba(56,189,248,0.2));
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+.chat-header-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+}
+.chat-header-close:hover { color: #fff; }
+.chat-body {
+    height: 220px;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scrollbar-width: thin;
+}
+.chat-msg { display: flex; }
+.chat-msg-user { justify-content: flex-end; }
+.chat-msg-bot { justify-content: flex-start; }
+.chat-bubble {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.chat-msg-user .chat-bubble {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    color: white;
+    border-radius: 12px 12px 2px 12px;
+}
+.chat-msg-bot .chat-bubble {
+    background: rgba(255,255,255,0.08);
+    color: #cbd5e1;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px 12px 12px 2px;
+}
+.chat-input-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+.chat-input {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 8px 14px;
+    color: #f1f5f9;
+    font-size: 13px;
+    font-family: var(--font-family);
+    outline: none;
+}
+.chat-input:focus { border-color: #38bdf8; }
+.chat-send-btn, .chat-mic-btn {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    border: none;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.chat-mic-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+.chat-send-btn:hover, .chat-mic-btn:hover { transform: scale(1.1); }
+
+/* ── Traffic Layer Overlay Colors ── */
+.traffic-overlay-free   { color: #10b981; }
+.traffic-overlay-mod    { color: #f59e0b; }
+.traffic-overlay-heavy  { color: #ef4444; }
+
+/* ── Voice Search Button Active State ── */
+#voiceSearchBtn.listening {
+    background: #ef4444 !important;
+    animation: pulse 1s infinite;
+    color: white;
+}
+
+/* ── Share Route Toast ── */
+.share-toast {
+    position: fixed;
+    bottom: 100px;
+    right: 30px;
+    background: #10b981;
+    color: white;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 99999;
+    box-shadow: 0 4px 15px rgba(16,185,129,0.4);
+    animation: fadeInUp 0.3s ease, fadeOut 0.5s ease 2.5s forwards;
+}
+@keyframes fadeInUp {
+    from { opacity:0; transform: translateY(20px); }
+    to   { opacity:1; transform: translateY(0); }
+}
+@keyframes fadeOut {
+    from { opacity:1; }
+    to   { opacity:0; }
+}
+
+/* ── GNN Node Style (used in traffexplainer too) ── */
+.custom-gnn-marker { background: transparent; border: none; }
+
+/* ── Congestion Heatmap Pulse ── */
+.congestion-heatmap-circle {
+    border-radius: 50%;
+    animation: heatPulse 3s ease-in-out infinite;
+}
+@keyframes heatPulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50%       { opacity: 0.7; transform: scale(1.05); }
+}
