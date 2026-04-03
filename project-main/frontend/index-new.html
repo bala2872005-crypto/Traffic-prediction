@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Prediction & Smart Routing</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Google Maps Style CSS -->
+    <link rel="stylesheet" href="css/google-maps-style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="maps-header">
+        <div class="maps-logo">
+            <span>🚦</span>
+            <span>Traffic Prediction</span>
+        </div>
+        
+        <!-- Search Container -->
+        <div class="search-container">
+            <div class="search-box" id="sourceBox">
+                <span class="search-icon">📍</span>
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="sourceInput" 
+                    placeholder="Choose starting point"
+                    autocomplete="off"
+                />
+                <button class="clear-btn" id="clearSource">×</button>
+                <div class="autocomplete-dropdown" id="sourceDropdown"></div>
+            </div>
+            
+            <div class="search-box" id="destBox">
+                <span class="search-icon">🎯</span>
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="destInput" 
+                    placeholder="Choose destination"
+                    autocomplete="off"
+                />
+                <button class="clear-btn" id="clearDest">×</button>
+                <div class="autocomplete-dropdown" id="destDropdown"></div>
+            </div>
+        </div>
+        
+        <!-- Vehicle Type Selector -->
+        <div class="vehicle-selector">
+            <button class="vehicle-btn active" data-type="normal">
+                🚗 Car
+            </button>
+            <button class="vehicle-btn" data-type="emergency">
+                🚑 Emergency
+            </button>
+            <button class="vehicle-btn" data-type="heavy">
+                🚛 Truck
+            </button>
+        </div>
+        
+        <!-- Get Directions Button -->
+        <button class="direction-btn" id="getDirectionsBtn" disabled>
+            Get Directions
+        </button>
+        
+        <!-- Logout -->
+        <button class="direction-btn" id="logoutBtn" style="background: #ea4335; margin-left: 8px;">
+            Logout
+        </button>
+    </header>
+    
+    <!-- Sidebar for Route Info -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Route Information</div>
+            <button class="close-sidebar" id="closeSidebar">×</button>
+        </div>
+        <div class="route-info-panel" id="routeInfoPanel">
+            <!-- Route information will be inserted here -->
+        </div>
+    </div>
+    
+    <!-- Map -->
+    <div class="map-wrapper">
+        <div id="traffic-map"></div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/google-maps-app.js"></script>
+</body>
+</html>

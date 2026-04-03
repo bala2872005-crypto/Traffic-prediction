@@ -457,7 +457,12 @@ def serve_login():
 
 @app.get("/app")
 def serve_frontend():
-    """Serve the frontend dashboard."""
+    """Serve the frontend dashboard (new Google Maps style UI)."""
+    return FileResponse(os.path.join(FRONTEND_DIR, "index-new.html"))
+
+@app.get("/app-old")
+def serve_frontend_old():
+    """Serve the old frontend dashboard."""
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
