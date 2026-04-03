@@ -38,17 +38,34 @@ const MapsApp = (() => {
         console.log('🗺️ Initializing Complete Maps Application...');
         
         try {
-            await initializeMap();
-            await loadLocations();
-            await loadTrafficData();
-            setupEventHandlers();
-            setupVoiceRecognition();
-            initializeAI();
-            getUserLocation();
+            // Show directions panel by default for easier testing
+            showDirections();
             
-            showToast('Maps ready! Try the AI Assistant', 'success');
+            await initializeMap();
+            console.log('✅ Map initialized');
+            
+            await loadLocations();
+            console.log('✅ Locations loaded');
+            
+            await loadTrafficData();
+            console.log('✅ Traffic data loaded');
+            
+            setupEventHandlers();
+            console.log('✅ Event handlers setup');
+            
+            setupVoiceRecognition();
+            console.log('✅ Voice recognition setup');
+            
+            initializeAI();
+            console.log('✅ AI initialized');
+            
+            getUserLocation();
+            console.log('✅ Location services initialized');
+            
+            showToast('🗺️ Maps ready! Try the AI Assistant', 'success');
+            console.log('🎉 Application fully loaded!');
         } catch (error) {
-            console.error('Initialization error:', error);
+            console.error('❌ Initialization error:', error);
             showToast('Failed to initialize. Please refresh.', 'error');
         }
     }
@@ -92,19 +109,26 @@ const MapsApp = (() => {
     async function loadLocations() {
         try {
             const response = await fetch(`${API_BASE}/nodes`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const data = await response.json();
             state.locations = data.nodes.map(node => ({
                 id: node.id,
                 name: node.name,
                 type: node.type,
-                lat: node.lat,
-                lng: node.lng,
+                lat: node.lat || 0,
+                lng: node.lng || 0,
                 searchText: `${node.name} ${node.id} ${node.type}`.toLowerCase()
             }));
             
+            console.log(`✅ Loaded ${state.locations.length} locations`);
             renderNodesOnMap();
         } catch (error) {
             console.error('Failed to load locations:', error);
+            showToast('Failed to load locations. Retrying...', 'error');
+            // Retry after 2 seconds
+            setTimeout(loadLocations, 2000);
         }
     }
     
@@ -112,20 +136,38 @@ const MapsApp = (() => {
     async function loadTrafficData() {
         try {
             const response = await fetch(`${API_BASE}/traffic-data`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const data = await response.json();
             state.trafficData = data.predictions || {};
+            
+            console.log('✅ Loaded traffic data');
             
             if (state.currentLayer === 'traffic') {
                 renderTrafficLayer();
             }
         } catch (error) {
             console.error('Failed to load traffic data:', error);
+            showToast('Traffic data unavailable', 'error');
         }
     }
     
     // Render Nodes on Map
     function renderNodesOnMap() {
+        if (!state.locations || state.locations.length === 0) {
+            console.log('⚠️ No locations to render');
+            return;
+        }
+        
+        console.log(`📍 Rendering ${state.locations.length} nodes on map`);
+        
         state.locations.forEach(location => {
+            if (!location.lat || !location.lng) {
+                console.warn(`Skipping ${location.name} - missing coordinates`);
+                return;
+            }
+            
             const marker = L.circleMarker([location.lat, location.lng], {
                 radius: 6,
                 fillColor: '#1a73e8',
@@ -141,6 +183,8 @@ const MapsApp = (() => {
                 </div>
             `);
         });
+        
+        console.log('✅ Nodes rendered successfully');
     }
     
     // Render Traffic Layer
@@ -325,7 +369,15 @@ const MapsApp = (() => {
     
     // Route Calculation
     async function checkAndCalculateRoute() {
-        if (!state.selectedStart || !state.selectedEnd) return;
+        if (!state.selectedStart || !state.selectedEnd) {
+            console.log('Missing start or end location');
+            return;
+        }
+        
+        if (state.selectedStart.id === state.selectedEnd.id) {
+            showToast('Start and destination must be different', 'error');
+            return;
+        }
         
         showLoading();
         
@@ -333,6 +385,9 @@ const MapsApp = (() => {
             let endpoint = '/route';
             if (state.currentMode === 'emergency') endpoint = '/route/emergency';
             else if (state.currentMode === 'truck') endpoint = '/route/heavy';
+            
+            console.log(`🔍 Calculating route: ${state.selectedStart.name} → ${state.selectedEnd.name}`);
+            console.log(`Mode: ${state.currentMode}, Endpoint: ${endpoint}`);
             
             const response = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'POST',
@@ -343,7 +398,14 @@ const MapsApp = (() => {
                 })
             });
             
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+            
             const result = await response.json();
+            console.log('✅ Route calculated:', result);
+            
             state.currentRoute = result;
             
             displayRouteResults(result);
@@ -352,7 +414,18 @@ const MapsApp = (() => {
             showToast('Route calculated successfully!', 'success');
         } catch (error) {
             console.error('Route calculation error:', error);
-            showToast('Failed to calculate route', 'error');
+            showToast(`Failed to calculate route: ${error.message}`, 'error');
+            
+            // Display error in results
+            const container = document.getElementById('routeResults');
+            container.innerHTML = `
+                <div style="padding: 32px; text-align: center; color: #ea4335;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 16px;"></i>
+                    <p style="font-weight: 500;">Route Calculation Failed</p>
+                    <p style="font-size: 14px; color: #5f6368; margin-top: 8px;">${error.message}</p>
+                    <button onclick="location.reload()" style="margin-top: 16px; padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer;">Refresh Page</button>
+                </div>
+            `;
         } finally {
             hideLoading();
         }
