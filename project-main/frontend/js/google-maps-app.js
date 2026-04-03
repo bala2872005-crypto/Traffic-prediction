@@ -309,23 +309,49 @@ const App = (() => {
         
         routeLines.push(routeLine);
         
-        // Draw traffic zones
+        // Draw ALL traffic zones (including green for normal flow)
+        if (result.path_details) {
+            result.path_details.forEach(node => {
+                const pos = [node.position[0], node.position[1]];
+                let zoneColor, zoneSeverity, zoneRadius, zoneOpacity;
+                
+                // Determine zone color based on traffic level
+                if (node.level === 'high') {
+                    zoneColor = COLORS.high; // Red
+                    zoneSeverity = 'high';
+                    zoneRadius = 12000;
+                    zoneOpacity = 0.2;
+                } else if (node.level === 'medium') {
+                    zoneColor = COLORS.medium; // Yellow
+                    zoneSeverity = 'medium';
+                    zoneRadius = 10000;
+                    zoneOpacity = 0.15;
+                } else {
+                    zoneColor = COLORS.low; // Green
+                    zoneSeverity = 'low';
+                    zoneRadius = 8000;
+                    zoneOpacity = 0.1;
+                }
+                
+                // Draw colored zone circle
+                const zone = L.circle(pos, {
+                    color: zoneColor,
+                    fillColor: zoneColor,
+                    fillOpacity: zoneOpacity,
+                    opacity: 0.4,
+                    weight: 2,
+                    radius: zoneRadius
+                }).addTo(map);
+                
+                trafficZones.push(zone);
+            });
+        }
+        
+        // Draw traffic warning markers (only for medium and high)
         if (result.traffic_warnings && result.traffic_warnings.length > 0) {
             result.traffic_warnings.forEach(warning => {
                 const pos = [warning.position[0], warning.position[1]];
                 let zoneColor = COLORS[warning.severity] || COLORS.medium;
-                let radius = warning.severity === 'high' ? 12000 : 10000;
-                
-                const zone = L.circle(pos, {
-                    color: zoneColor,
-                    fillColor: zoneColor,
-                    fillOpacity: 0.15,
-                    opacity: 0.5,
-                    weight: 2,
-                    radius: radius
-                }).addTo(map);
-                
-                trafficZones.push(zone);
                 
                 const warningMarker = L.marker(pos, {
                     icon: L.divIcon({
