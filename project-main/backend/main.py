@@ -82,6 +82,7 @@ class RegisterRequest(BaseModel):
 # - Endpoints -
 
 @app.get("/")
+@app.head("/")
 def home():
     """Health check endpoint."""
     return {
@@ -89,6 +90,16 @@ def home():
         "status": "active",
         "model": "GNN + GRU (Spatial-Temporal)",
         "nodes": len(NODE_LIST),
+        "version": "1.0.0"
+    }
+
+@app.get("/api")
+@app.head("/api")
+def api_home():
+    """API health check endpoint."""
+    return {
+        "message": "AI Traffic Prediction & Smart Routing System API",
+        "status": "active",
         "version": "1.0.0"
     }
 
